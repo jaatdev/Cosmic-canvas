@@ -18,6 +18,7 @@ interface CanvasState {
     projectName: string;
     pageCount: number;
     pageHeight: number;
+    zoom: number;
 
     // Separate widths for pen and eraser
     penColor: string;
@@ -39,6 +40,10 @@ interface CanvasState {
     setProjectName: (name: string) => void;
     addPage: () => void;
     setPageHeight: (height: number) => void;
+    setZoom: (zoom: number) => void;
+    zoomIn: () => void;
+    zoomOut: () => void;
+    resetZoom: () => void;
     setPenColor: (color: string) => void;
     setPenWidth: (width: number) => void;
     setEraserWidth: (width: number) => void;
@@ -62,7 +67,8 @@ export const useStore = create<CanvasState>((set, get) => ({
     selectedImageId: null,
     projectName: 'Untitled Universe',
     pageCount: 1,
-    pageHeight: 0, // Will be set on mount
+    pageHeight: 0,
+    zoom: 1, // 100% zoom
 
     // Separate widths
     penColor: '#000000',
@@ -184,6 +190,12 @@ export const useStore = create<CanvasState>((set, get) => ({
 
     // Set page height (called once on mount)
     setPageHeight: (height) => set({ pageHeight: height }),
+
+    // Zoom controls (10% to 500%)
+    setZoom: (zoom) => set({ zoom: Math.max(0.1, Math.min(5.0, zoom)) }),
+    zoomIn: () => set((state) => ({ zoom: Math.min(5.0, Math.round((state.zoom + 0.1) * 10) / 10) })),
+    zoomOut: () => set((state) => ({ zoom: Math.max(0.1, Math.round((state.zoom - 0.1) * 10) / 10) })),
+    resetZoom: () => set({ zoom: 1 }),
 
     // Pen settings
     setPenColor: (color) => set({ penColor: color }),

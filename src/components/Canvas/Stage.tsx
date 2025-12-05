@@ -77,6 +77,7 @@ export default function Stage() {
         penWidth,
         eraserWidth,
         pageCount,
+        zoom,
         addStroke,
         addImage,
         selectImage,
@@ -379,31 +380,31 @@ export default function Stage() {
             return;
         }
 
-        // Use pageX/pageY for correct document-relative coordinates
-        // pageX = clientX + scrollX, pageY = clientY + scrollY
-        const x = e.pageX;
-        const y = e.pageY;
+        // Use pageX/pageY for document-relative coordinates
+        // Divide by zoom to get internal canvas coordinates
+        const x = e.pageX / zoom;
+        const y = e.pageY / zoom;
 
         (e.target as HTMLElement).setPointerCapture(e.pointerId);
 
         currentPointsRef.current = [{ x, y, pressure: e.pressure || 0.5 }];
         setIsDrawing(true);
-    }, [currentTool, selectImage]);
+    }, [currentTool, selectImage, zoom]);
 
     // Pointer Move - Continue drawing
     const handlePointerMove = useCallback((e: React.PointerEvent) => {
         if (!isDrawing) return;
         if (e.pointerType === 'touch') return;
 
-        // Use pageX/pageY for correct document-relative coordinates
-        const x = e.pageX;
-        const y = e.pageY;
+        // Use pageX/pageY divided by zoom for accurate drawing
+        const x = e.pageX / zoom;
+        const y = e.pageY / zoom;
 
         if (currentPointsRef.current) {
             currentPointsRef.current.push({ x, y, pressure: e.pressure || 0.5 });
             renderActiveLayer();
         }
-    }, [isDrawing, renderActiveLayer]);
+    }, [isDrawing, renderActiveLayer, zoom]);
 
     // Pointer Up - End drawing and save stroke
     const handlePointerUp = useCallback((e: React.PointerEvent) => {
@@ -464,7 +465,7 @@ export default function Stage() {
             style={{
                 position: 'relative',
                 width: '100vw',
-                height: totalHeight,
+                height: totalHeight * zoom, // Scale container height with zoom
                 minHeight: '100vh',
                 overflow: 'visible',
                 touchAction: 'none',
@@ -475,41 +476,51 @@ export default function Stage() {
             onPointerUp={handlePointerUp}
             onPointerLeave={handlePointerLeave}
         >
-            {/* Scroll Snap Targets - invisible page markers for notebook-style scrolling */}
-            {Array.from({ length: pageCount }).map((_, i) => (
-                <div
-                    key={`page-snap-${i}`}
-                    className="page-snap"
-                    style={{
-                        position: 'absolute',
-                        top: i * height,
-                        left: 0,
-                        width: '100%',
-                        height: height,
-                        scrollSnapAlign: 'start',
-                        scrollSnapStop: 'always', // Forces stop on every page
-                        pointerEvents: 'none',
-                    }}
+            {/* Transform Wrapper - scales all canvas layers */}
+            <div
+                style={{
+                    transform: `scale(${zoom})`,
+                    transformOrigin: 'top left',
+                    width: '100vw',
+                    height: totalHeight,
+                }}
+            >
+                {/* Scroll Snap Targets - invisible page markers for notebook-style scrolling */}
+                {Array.from({ length: pageCount }).map((_, i) => (
+                    <div
+                        key={`page-snap-${i}`}
+                        className="page-snap"
+                        style={{
+                            position: 'absolute',
+                            top: i * height,
+                            left: 0,
+                            width: '100%',
+                            height: height,
+                            scrollSnapAlign: 'start',
+                            scrollSnapStop: 'always',
+                            pointerEvents: 'none',
+                        }}
+                    />
+                ))}
+
+                {/* Z-Index 0: Background */}
+                <BackgroundLayer totalHeight={totalHeight} />
+
+                {/* Z-Index 5: Images */}
+                <ObjectLayer totalHeight={totalHeight} />
+
+                {/* Z-Index 10: Stroke History + Page Separators */}
+                <canvas
+                    ref={staticLayerRef}
+                    style={{ ...canvasStyle, zIndex: 10, pointerEvents: 'none' }}
                 />
-            ))}
 
-            {/* Z-Index 0: Background */}
-            <BackgroundLayer totalHeight={totalHeight} />
-
-            {/* Z-Index 5: Images */}
-            <ObjectLayer totalHeight={totalHeight} />
-
-            {/* Z-Index 10: Stroke History + Page Separators */}
-            <canvas
-                ref={staticLayerRef}
-                style={{ ...canvasStyle, zIndex: 10, pointerEvents: 'none' }}
-            />
-
-            {/* Z-Index 20: Active Stroke */}
-            <canvas
-                ref={activeLayerRef}
-                style={{ ...canvasStyle, zIndex: 20, pointerEvents: 'none' }}
-            />
+                {/* Z-Index 20: Active Stroke */}
+                <canvas
+                    ref={activeLayerRef}
+                    style={{ ...canvasStyle, zIndex: 20, pointerEvents: 'none' }}
+                />
+            </div>
         </div>
     );
 }

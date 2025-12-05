@@ -9,6 +9,7 @@ import {
     Grid3X3,
     Circle,
     Minus,
+    Plus,
     Paintbrush,
     Maximize,
     Minimize,
@@ -17,20 +18,20 @@ import {
     Image as ImageIcon,
     Hand,
     Download,
+    ZoomIn,
     X
 } from 'lucide-react';
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { Pattern } from '@/types';
 
-type ActivePanel = 'none' | 'pen' | 'eraser' | 'bg';
+type ActivePanel = 'none' | 'pen' | 'eraser' | 'bg' | 'zoom';
 
-// Smart Scale: Calculate dimensions to fit viewport (with scroll offset)
+// Smart Scale: Calculate dimensions to fit viewport
 const calculateSmartScale = (
     naturalWidth: number,
     naturalHeight: number,
     viewportWidth: number,
-    viewportHeight: number,
-    scrollY: number = 0
+    viewportHeight: number
 ): { width: number; height: number; x: number; y: number } => {
     const maxWidth = Math.min(600, viewportWidth * 0.5);
     const maxHeight = viewportHeight * 0.6;
@@ -46,8 +47,7 @@ const calculateSmartScale = (
     }
 
     const x = (viewportWidth - width) / 2;
-    // Center on current viewport (add scrollY)
-    const y = scrollY + (viewportHeight - height) / 2;
+    const y = (viewportHeight - height) / 2;
 
     return { width, height, x, y };
 };
@@ -73,6 +73,7 @@ export default function Toolbar() {
         projectName,
         pageCount,
         pageHeight,
+        zoom,
         setTool,
         setPenColor,
         setPenWidth,
@@ -82,7 +83,10 @@ export default function Toolbar() {
         addImage,
         undo,
         redo,
-        clearCanvas
+        clearCanvas,
+        zoomIn,
+        zoomOut,
+        resetZoom
     } = useStore();
 
     const penColorRef = useRef<HTMLInputElement>(null);
@@ -159,14 +163,11 @@ export default function Toolbar() {
         const img = new Image();
 
         img.onload = () => {
-            // Use current scroll position for placement
-            const scrollY = window.scrollY || window.pageYOffset || 0;
             const { width, height, x, y } = calculateSmartScale(
                 img.naturalWidth,
                 img.naturalHeight,
                 window.innerWidth,
-                window.innerHeight,
-                scrollY
+                window.innerHeight
             );
 
             const canvasImage: CanvasImage = {
@@ -222,6 +223,11 @@ export default function Toolbar() {
     const handlePatternSelect = (pattern: Pattern) => {
         setCanvasPattern(pattern);
         setActivePanel('none');
+    };
+
+    // Handle Zoom icon click
+    const handleZoomClick = () => {
+        setActivePanel(activePanel === 'zoom' ? 'none' : 'zoom');
     };
 
     // Render floating panel
@@ -395,6 +401,59 @@ export default function Toolbar() {
                         </div>
                     </>
                 )}
+
+                {/* Zoom Panel */}
+                {activePanel === 'zoom' && (
+                    <>
+                        <div className="flex items-center justify-between mb-3">
+                            <span className="text-xs text-white/60 uppercase tracking-wider font-medium">Zoom</span>
+                            <button
+                                onClick={() => setActivePanel('none')}
+                                className="p-1 rounded-lg hover:bg-white/10 transition-colors"
+                            >
+                                <X className="w-3 h-3 text-white/40" />
+                            </button>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                            {/* Zoom Out */}
+                            <button
+                                onClick={zoomOut}
+                                disabled={zoom <= 0.1}
+                                className={`p-2 rounded-lg transition-all ${zoom <= 0.1
+                                    ? 'bg-white/5 opacity-30 cursor-not-allowed'
+                                    : 'bg-white/10 hover:bg-white/20 hover:scale-110'
+                                    }`}
+                                title="Zoom Out"
+                            >
+                                <Minus className="w-4 h-4 text-white/60" />
+                            </button>
+
+                            {/* Zoom Display - Click to reset */}
+                            <button
+                                onClick={resetZoom}
+                                className="px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 
+                                    transition-all font-mono text-sm text-white/80 min-w-[60px]"
+                                title="Click to reset to 100%"
+                            >
+                                {Math.round(zoom * 100)}%
+                            </button>
+
+                            {/* Zoom In */}
+                            <button
+                                onClick={zoomIn}
+                                disabled={zoom >= 5.0}
+                                className={`p-2 rounded-lg transition-all ${zoom >= 5.0
+                                    ? 'bg-white/5 opacity-30 cursor-not-allowed'
+                                    : 'bg-white/10 hover:bg-white/20 hover:scale-110'
+                                    }`}
+                                title="Zoom In"
+                            >
+                                <Plus className="w-4 h-4 text-white/60" />
+                            </button>
+                        </div>
+                    </>
+                )}
             </div>
         );
     };
@@ -512,6 +571,21 @@ export default function Toolbar() {
                 >
                     <Paintbrush className={`w-5 h-5 ${activePanel === 'bg' ? 'text-white' : 'text-white/60'}`} />
                     {activePanel === 'bg' && (
+                        <span className="absolute -left-1 top-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-white rounded-full" />
+                    )}
+                </button>
+
+                {/* Zoom Controls */}
+                <button
+                    onClick={handleZoomClick}
+                    className={`relative p-3 rounded-xl transition-all hover:scale-110 ${activePanel === 'zoom'
+                        ? 'bg-white/25 ring-2 ring-white/50'
+                        : 'bg-white/5 hover:bg-white/10'
+                        }`}
+                    title={`Zoom (${Math.round(zoom * 100)}%)`}
+                >
+                    <ZoomIn className={`w-5 h-5 ${activePanel === 'zoom' ? 'text-white' : 'text-white/60'}`} />
+                    {activePanel === 'zoom' && (
                         <span className="absolute -left-1 top-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-white rounded-full" />
                     )}
                 </button>
