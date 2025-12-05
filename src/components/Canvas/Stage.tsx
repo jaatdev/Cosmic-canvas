@@ -81,9 +81,10 @@ export default function Stage() {
     }, [currentTool, penColor, penWidth, eraserWidth]);
 
     // Draw a single stroke to a canvas context
+    // Uses Pick to only require render-relevant properties (id not needed for drawing)
     const drawStroke = useCallback((
         ctx: CanvasRenderingContext2D,
-        stroke: Stroke
+        stroke: Pick<Stroke, 'points' | 'color' | 'size' | 'isEraser'>
     ) => {
         if (stroke.points.length < 2) return;
 

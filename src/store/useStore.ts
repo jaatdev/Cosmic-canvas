@@ -1,14 +1,18 @@
 import { create } from 'zustand';
-import { Point, Stroke, Tool, Pattern, CanvasImage } from '@/types';
+import { Point, Stroke, Tool, Pattern, CanvasImage, ActionItem } from '@/types';
 
 // Re-export types for convenience
-export type { Point, Stroke, Tool, Pattern, CanvasImage };
+export type { Point, Stroke, Tool, Pattern, CanvasImage, ActionItem };
+
+// Generate unique ID
+const generateId = () => `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
 // Store state
 interface CanvasState {
     strokes: Stroke[];
-    redoStack: Stroke[];
     images: CanvasImage[];
+    historyStack: ActionItem[];
+    redoStack: ActionItem[];
     currentTool: Tool;
 
     // Separate widths for pen and eraser
@@ -21,11 +25,10 @@ interface CanvasState {
     canvasPattern: Pattern;
 
     // Actions
-    addStroke: (stroke: Omit<Stroke, 'isEraser'>) => void;
+    addStroke: (stroke: Omit<Stroke, 'id' | 'isEraser'>) => void;
+    addImage: (image: CanvasImage) => void;
     undo: () => void;
     redo: () => void;
-    addImage: (image: CanvasImage) => void;
-    removeImage: (id: string) => void;
     setTool: (tool: Tool) => void;
     setPenColor: (color: string) => void;
     setPenWidth: (width: number) => void;
@@ -42,8 +45,9 @@ interface CanvasState {
 export const useStore = create<CanvasState>((set, get) => ({
     // Initial state
     strokes: [],
-    redoStack: [],
     images: [],
+    historyStack: [],
+    redoStack: [],
     currentTool: 'pen',
 
     // Separate widths
@@ -55,57 +59,80 @@ export const useStore = create<CanvasState>((set, get) => ({
     canvasBackground: '#ffffff',
     canvasPattern: 'none',
 
-    // Add completed stroke to history (clears redo stack!)
-    addStroke: (stroke) => {
+    // Add stroke with unified history
+    addStroke: (strokeData) => {
         const state = get();
         const isEraser = state.currentTool === 'eraser';
+
+        const stroke: Stroke = {
+            id: generateId(),
+            ...strokeData,
+            size: isEraser ? state.eraserWidth : state.penWidth,
+            color: isEraser ? '#000000' : state.penColor,
+            isEraser,
+        };
+
         set({
-            strokes: [...state.strokes, {
-                ...stroke,
-                size: isEraser ? state.eraserWidth : state.penWidth,
-                color: isEraser ? '#000000' : state.penColor,
-                isEraser,
-            }],
-            redoStack: [],
+            strokes: [...state.strokes, stroke],
+            historyStack: [...state.historyStack, { type: 'stroke', data: stroke }],
+            redoStack: [], // Clear redo on new action
         });
     },
 
-    // Undo: Move last stroke from strokes to redoStack
+    // Add image with unified history
+    addImage: (image) => {
+        const state = get();
+        set({
+            images: [...state.images, image],
+            historyStack: [...state.historyStack, { type: 'image', data: image }],
+            redoStack: [], // Clear redo on new action
+        });
+    },
+
+    // Unified undo - works for both strokes and images
     undo: () => {
         const state = get();
-        if (state.strokes.length === 0) return;
+        if (state.historyStack.length === 0) return;
 
-        const lastStroke = state.strokes[state.strokes.length - 1];
-        set({
-            strokes: state.strokes.slice(0, -1),
-            redoStack: [...state.redoStack, lastStroke],
-        });
+        const lastAction = state.historyStack[state.historyStack.length - 1];
+        const newHistoryStack = state.historyStack.slice(0, -1);
+
+        if (lastAction.type === 'stroke') {
+            set({
+                strokes: state.strokes.filter(s => s.id !== lastAction.data.id),
+                historyStack: newHistoryStack,
+                redoStack: [...state.redoStack, lastAction],
+            });
+        } else if (lastAction.type === 'image') {
+            set({
+                images: state.images.filter(i => i.id !== lastAction.data.id),
+                historyStack: newHistoryStack,
+                redoStack: [...state.redoStack, lastAction],
+            });
+        }
     },
 
-    // Redo: Move last stroke from redoStack back to strokes
+    // Unified redo - works for both strokes and images
     redo: () => {
         const state = get();
         if (state.redoStack.length === 0) return;
 
-        const strokeToRedo = state.redoStack[state.redoStack.length - 1];
-        set({
-            strokes: [...state.strokes, strokeToRedo],
-            redoStack: state.redoStack.slice(0, -1),
-        });
-    },
+        const actionToRedo = state.redoStack[state.redoStack.length - 1];
+        const newRedoStack = state.redoStack.slice(0, -1);
 
-    // Add image to canvas
-    addImage: (image) => {
-        set((state) => ({
-            images: [...state.images, image],
-        }));
-    },
-
-    // Remove image from canvas
-    removeImage: (id) => {
-        set((state) => ({
-            images: state.images.filter((img) => img.id !== id),
-        }));
+        if (actionToRedo.type === 'stroke') {
+            set({
+                strokes: [...state.strokes, actionToRedo.data],
+                historyStack: [...state.historyStack, actionToRedo],
+                redoStack: newRedoStack,
+            });
+        } else if (actionToRedo.type === 'image') {
+            set({
+                images: [...state.images, actionToRedo.data],
+                historyStack: [...state.historyStack, actionToRedo],
+                redoStack: newRedoStack,
+            });
+        }
     },
 
     // Set current tool
@@ -122,11 +149,16 @@ export const useStore = create<CanvasState>((set, get) => ({
     setCanvasBackground: (color) => set({ canvasBackground: color }),
     setCanvasPattern: (pattern) => set({ canvasPattern: pattern }),
 
-    // Clear all strokes and images
-    clearCanvas: () => set({ strokes: [], redoStack: [], images: [] }),
+    // Clear everything
+    clearCanvas: () => set({
+        strokes: [],
+        images: [],
+        historyStack: [],
+        redoStack: []
+    }),
 
     // Computed helpers
-    canUndo: () => get().strokes.length > 0,
+    canUndo: () => get().historyStack.length > 0,
     canRedo: () => get().redoStack.length > 0,
 }));
 

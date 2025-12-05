@@ -51,7 +51,7 @@ const calculateSmartScale = (
 const generateId = () => `img-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
 /**
- * Toolbar Component - The Toggleable Cockpit with Image Upload
+ * Toolbar Component - The Toggleable Cockpit with Unified Undo/Redo
  */
 export default function Toolbar() {
     const {
@@ -61,7 +61,7 @@ export default function Toolbar() {
         eraserWidth,
         canvasBackground,
         canvasPattern,
-        strokes,
+        historyStack,
         redoStack,
         setTool,
         setPenColor,
@@ -84,7 +84,7 @@ export default function Toolbar() {
 
     const isPen = currentTool === 'pen';
     const isEraser = currentTool === 'eraser';
-    const canUndoAction = strokes.length > 0;
+    const canUndoAction = historyStack.length > 0;
     const canRedoAction = redoStack.length > 0;
 
     const patterns: { id: Pattern; icon: React.ReactNode; label: string }[] = [
@@ -148,8 +148,6 @@ export default function Toolbar() {
         };
 
         img.src = url;
-
-        // Reset input so same file can be uploaded again
         e.target.value = '';
     }, [addImage]);
 

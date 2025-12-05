@@ -7,6 +7,7 @@ export interface Point {
 }
 
 export interface Stroke {
+    id: string;
     points: Point[];
     color: string;
     size: number;
@@ -33,11 +34,17 @@ export interface CanvasImage {
     naturalHeight: number;
 }
 
+// Unified timeline action types
+export type ActionItem =
+    | { type: 'stroke'; data: Stroke }
+    | { type: 'image'; data: CanvasImage };
+
 export interface AppState {
     strokes: Stroke[];
-    currentConfig: StrokeConfig;
+    images: CanvasImage[];
+    historyStack: ActionItem[];
+    redoStack: ActionItem[];
     currentTool: Tool;
     canvasBackground: string;
     canvasPattern: Pattern;
-    images: CanvasImage[];
 }
