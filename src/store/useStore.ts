@@ -27,15 +27,17 @@ interface CanvasState {
 
     // Actions
     addStroke: (stroke: Stroke) => void;
+    setColor: (color: string) => void;
+    setSize: (size: number) => void;
     setStrokeConfig: (config: Partial<StrokeConfig>) => void;
-    clearStrokes: () => void;
+    clearCanvas: () => void;
 }
 
 export const useStore = create<CanvasState>((set) => ({
     // Initial state
     strokes: [],
     currentConfig: {
-        color: '#000000',
+        color: '#ffffff',
         size: 8,
     },
 
@@ -45,6 +47,18 @@ export const useStore = create<CanvasState>((set) => ({
             strokes: [...state.strokes, stroke],
         })),
 
+    // Set stroke color
+    setColor: (color) =>
+        set((state) => ({
+            currentConfig: { ...state.currentConfig, color },
+        })),
+
+    // Set stroke size
+    setSize: (size) =>
+        set((state) => ({
+            currentConfig: { ...state.currentConfig, size: Math.max(1, Math.min(50, size)) },
+        })),
+
     // Update stroke configuration
     setStrokeConfig: (config) =>
         set((state) => ({
@@ -52,7 +66,7 @@ export const useStore = create<CanvasState>((set) => ({
         })),
 
     // Clear all strokes
-    clearStrokes: () => set({ strokes: [] }),
+    clearCanvas: () => set({ strokes: [] }),
 }));
 
 export default useStore;
