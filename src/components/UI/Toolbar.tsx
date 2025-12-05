@@ -1,37 +1,59 @@
 'use client';
 
 import { useStore } from '@/store/useStore';
-import { Pencil, Palette, Trash2 } from 'lucide-react';
+import { Pencil, Eraser, Palette, Trash2 } from 'lucide-react';
 import { useRef } from 'react';
 
 /**
  * Toolbar Component - The Gravity Dock
  * 
- * Glassmorphism sidebar with color picker, size slider, and clear button.
+ * Glassmorphism sidebar with pen, eraser, color picker, size slider, and clear button.
  * Fixed to the right side of the viewport, vertically centered.
  */
 export default function Toolbar() {
-    const { currentConfig, setColor, setSize, clearCanvas } = useStore();
+    const { currentConfig, currentTool, setColor, setSize, setTool, clearCanvas } = useStore();
     const colorInputRef = useRef<HTMLInputElement>(null);
+
+    const isEraserActive = currentTool === 'eraser';
+    const isPenActive = currentTool === 'pen';
 
     return (
         <div
             className="fixed right-4 top-1/2 -translate-y-1/2 z-50
-        flex flex-col items-center gap-4 p-4
+        flex flex-col items-center gap-3 p-4
         bg-black/30 backdrop-blur-xl
         border border-white/20 rounded-2xl
         shadow-2xl"
         >
-            {/* Pen Icon */}
-            <div className="p-2 rounded-xl bg-white/10">
-                <Pencil className="w-5 h-5 text-white/80" />
-            </div>
+            {/* Pen Tool */}
+            <button
+                onClick={() => setTool('pen')}
+                className={`p-3 rounded-xl transition-all hover:scale-110 ${isPenActive
+                        ? 'bg-white/20 ring-2 ring-white/40'
+                        : 'bg-white/5 hover:bg-white/10'
+                    }`}
+                title="Pen Tool"
+            >
+                <Pencil className={`w-5 h-5 ${isPenActive ? 'text-white' : 'text-white/60'}`} />
+            </button>
+
+            {/* Eraser Tool */}
+            <button
+                onClick={() => setTool('eraser')}
+                className={`p-3 rounded-xl transition-all hover:scale-110 ${isEraserActive
+                        ? 'bg-white/20 ring-2 ring-white/40'
+                        : 'bg-white/5 hover:bg-white/10'
+                    }`}
+                title="Eraser Tool"
+            >
+                <Eraser className={`w-5 h-5 ${isEraserActive ? 'text-white' : 'text-white/60'}`} />
+            </button>
 
             {/* Divider */}
             <div className="w-8 h-px bg-white/20" />
 
-            {/* Color Picker */}
-            <div className="relative">
+            {/* Color Picker (only visible for pen) */}
+            <div className={`relative transition-opacity ${isEraserActive ? 'opacity-40 pointer-events-none' : 'opacity-100'}`}>
                 <button
                     onClick={() => colorInputRef.current?.click()}
                     className="w-10 h-10 rounded-full border-2 border-white/30 
@@ -75,10 +97,11 @@ export default function Toolbar() {
                 />
                 {/* Size Preview */}
                 <div
-                    className="rounded-full bg-white/80 transition-all"
+                    className={`rounded-full transition-all ${isEraserActive ? 'bg-white/40' : ''}`}
                     style={{
                         width: Math.min(currentConfig.size, 24),
-                        height: Math.min(currentConfig.size, 24)
+                        height: Math.min(currentConfig.size, 24),
+                        backgroundColor: isEraserActive ? undefined : currentConfig.color,
                     }}
                 />
             </div>
@@ -93,7 +116,7 @@ export default function Toolbar() {
                         clearCanvas();
                     }
                 }}
-                className="p-2 rounded-xl bg-white/10 hover:bg-red-500/30 
+                className="p-3 rounded-xl bg-white/5 hover:bg-red-500/30 
           transition-all hover:scale-110 group"
                 title="Clear Canvas"
             >

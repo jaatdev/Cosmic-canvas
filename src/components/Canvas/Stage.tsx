@@ -4,7 +4,8 @@ import { useRef, useEffect, useState, useCallback } from 'react';
 import { useWindowDimensions } from '@/hooks/useWindowDimensions';
 import getStroke from 'perfect-freehand';
 import { getSvgPathFromStroke } from '@/utils/ink';
-import { useStore, Point, Stroke } from '@/store/useStore';
+import { useStore } from '@/store/useStore';
+import { Point, Stroke } from '@/types';
 
 // perfect-freehand options for gel pen feel
 const getStrokeOptions = (size: number) => ({
@@ -24,13 +25,13 @@ const getStrokeOptions = (size: number) => ({
 });
 
 /**
- * Stage Component - Multi-Layer Canvas (Performance Optimized)
+ * Stage Component - Multi-Layer Canvas with Eraser Support
  * 
  * Two-canvas architecture:
  * - Static Layer (z-10): Renders completed stroke history
  * - Active Layer (z-20): Renders only the current stroke being drawn
  * 
- * This prevents redrawing the entire history on every frame.
+ * Eraser uses globalCompositeOperation = 'destination-out'
  */
 export default function Stage() {
     const staticLayerRef = useRef<HTMLCanvasElement>(null);
@@ -38,7 +39,7 @@ export default function Stage() {
     const { width, height, pixelRatio } = useWindowDimensions();
 
     // Zustand store
-    const { strokes, currentConfig, addStroke } = useStore();
+    const { strokes, currentConfig, currentTool, addStroke } = useStore();
 
     // Local drawing state
     const [isDrawing, setIsDrawing] = useState(false);
@@ -51,12 +52,19 @@ export default function Stage() {
     ) => {
         if (stroke.points.length < 2) return;
 
+        // Set composite operation based on eraser
+        if (stroke.isEraser) {
+            ctx.globalCompositeOperation = 'destination-out';
+        } else {
+            ctx.globalCompositeOperation = 'source-over';
+        }
+
         const inputPoints = stroke.points.map(p => [p.x, p.y, p.pressure]);
         const strokeOutline = getStroke(inputPoints, getStrokeOptions(stroke.size));
         const pathData = getSvgPathFromStroke(strokeOutline);
         const path = new Path2D(pathData);
 
-        ctx.fillStyle = stroke.color;
+        ctx.fillStyle = stroke.isEraser ? '#000000' : stroke.color;
         ctx.fill(path);
     }, []);
 
@@ -84,11 +92,15 @@ export default function Stage() {
         if (!ctx) return;
 
         // Clear and draw background
+        ctx.globalCompositeOperation = 'source-over';
         ctx.fillStyle = '#1e1e1e';
         ctx.fillRect(0, 0, width, height);
 
         // Draw all completed strokes
         strokes.forEach((stroke) => drawStroke(ctx, stroke));
+
+        // Reset composite operation
+        ctx.globalCompositeOperation = 'source-over';
 
         console.log(`Static layer rendered: ${strokes.length} strokes`);
     }, [width, height, strokes, setupCanvas, drawStroke]);
@@ -109,13 +121,26 @@ export default function Stage() {
         // Draw current stroke if exists
         const currentPoints = currentPointsRef.current;
         if (currentPoints && currentPoints.length >= 2) {
+            const isEraser = currentTool === 'eraser';
+
+            // Set composite operation
+            if (isEraser) {
+                ctx.globalCompositeOperation = 'destination-out';
+            } else {
+                ctx.globalCompositeOperation = 'source-over';
+            }
+
             drawStroke(ctx, {
                 points: currentPoints,
                 color: currentConfig.color,
                 size: currentConfig.size,
+                isEraser,
             });
+
+            // Reset
+            ctx.globalCompositeOperation = 'source-over';
         }
-    }, [width, height, pixelRatio, currentConfig, drawStroke]);
+    }, [width, height, pixelRatio, currentConfig, currentTool, drawStroke]);
 
     // Setup canvases on mount/resize
     useEffect(() => {
@@ -149,8 +174,8 @@ export default function Stage() {
         currentPointsRef.current = [{ x, y, pressure: e.pressure || 0.5 }];
         setIsDrawing(true);
 
-        console.log(`Start stroke: (${x.toFixed(1)}, ${y.toFixed(1)})`);
-    }, []);
+        console.log(`Start ${currentTool}: (${x.toFixed(1)}, ${y.toFixed(1)})`);
+    }, [currentTool]);
 
     // Pointer Move - Continue drawing (FAST LOOP - only active layer)
     const handlePointerMove = useCallback((e: React.PointerEvent) => {
@@ -177,13 +202,13 @@ export default function Stage() {
 
         const points = currentPointsRef.current;
         if (points && points.length >= 2) {
-            // Save stroke to history
+            // Save stroke to history (isEraser is added by the store)
             addStroke({
                 points,
                 color: currentConfig.color,
                 size: currentConfig.size,
             });
-            console.log(`Stroke saved: ${points.length} points`);
+            console.log(`${currentTool} stroke saved: ${points.length} points`);
         }
 
         // Clear current stroke IMMEDIATELY
@@ -199,7 +224,7 @@ export default function Stage() {
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
             }
         }
-    }, [addStroke, currentConfig]);
+    }, [addStroke, currentConfig, currentTool]);
 
     // Pointer Leave - Save stroke if still drawing
     const handlePointerLeave = useCallback((e: React.PointerEvent) => {
@@ -232,7 +257,7 @@ export default function Stage() {
                 height: '100vh',
                 overflow: 'hidden',
                 touchAction: 'none',
-                cursor: 'crosshair',
+                cursor: currentTool === 'eraser' ? 'cell' : 'crosshair',
             }}
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
