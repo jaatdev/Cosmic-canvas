@@ -14,6 +14,7 @@ import {
     Undo2,
     Redo2,
     Image as ImageIcon,
+    Hand,
     X
 } from 'lucide-react';
 import { useRef, useState, useEffect, useCallback } from 'react';
@@ -51,7 +52,7 @@ const calculateSmartScale = (
 const generateId = () => `img-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
 /**
- * Toolbar Component - The Toggleable Cockpit with Unified Undo/Redo
+ * Toolbar Component - The Toggleable Cockpit with Select Tool
  */
 export default function Toolbar() {
     const {
@@ -84,6 +85,7 @@ export default function Toolbar() {
 
     const isPen = currentTool === 'pen';
     const isEraser = currentTool === 'eraser';
+    const isSelect = currentTool === 'select';
     const canUndoAction = historyStack.length > 0;
     const canRedoAction = redoStack.length > 0;
 
@@ -144,7 +146,6 @@ export default function Toolbar() {
             };
 
             addImage(canvasImage);
-            console.log(`Image uploaded: ${img.naturalWidth}x${img.naturalHeight} -> ${width.toFixed(0)}x${height.toFixed(0)}`);
         };
 
         img.src = url;
@@ -169,6 +170,12 @@ export default function Toolbar() {
         } else {
             setActivePanel(activePanel === 'eraser' ? 'none' : 'eraser');
         }
+    };
+
+    // Handle Select icon click
+    const handleSelectClick = () => {
+        setTool('select');
+        setActivePanel('none'); // No panel for select tool
     };
 
     // Handle Background icon click
@@ -368,6 +375,18 @@ export default function Toolbar() {
             <div className="flex flex-col items-center gap-2 p-3
         bg-black/40 backdrop-blur-xl border border-white/20 rounded-2xl shadow-2xl"
             >
+                {/* Select Tool */}
+                <button
+                    onClick={handleSelectClick}
+                    className={`relative p-3 rounded-xl transition-all hover:scale-110 ${isSelect
+                            ? 'bg-white/25 ring-2 ring-white/50'
+                            : 'bg-white/5 hover:bg-white/10'
+                        }`}
+                    title="Select Tool (V)"
+                >
+                    <Hand className={`w-5 h-5 ${isSelect ? 'text-white' : 'text-white/60'}`} />
+                </button>
+
                 {/* Pen Tool */}
                 <button
                     onClick={handlePenClick}

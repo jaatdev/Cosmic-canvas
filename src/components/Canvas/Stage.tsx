@@ -66,7 +66,7 @@ export default function Stage() {
     const { width, height, pixelRatio } = useWindowDimensions();
 
     // Zustand store
-    const { strokes, currentTool, penColor, penWidth, eraserWidth, addStroke, addImage, undo, redo } = useStore();
+    const { strokes, currentTool, penColor, penWidth, eraserWidth, addStroke, addImage, selectImage, undo, redo } = useStore();
 
     // Local drawing state
     const [isDrawing, setIsDrawing] = useState(false);
@@ -244,9 +244,15 @@ export default function Stage() {
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [undo, redo]);
 
-    // Pointer Down - Start drawing
+    // Pointer Down - Start drawing or deselect
     const handlePointerDown = useCallback((e: React.PointerEvent) => {
         if (e.pointerType === 'touch') return;
+
+        // In select mode, clicking empty canvas deselects image
+        if (currentTool === 'select') {
+            selectImage(null);
+            return;
+        }
 
         const container = e.currentTarget as HTMLElement;
         const rect = container.getBoundingClientRect();
@@ -257,7 +263,7 @@ export default function Stage() {
 
         currentPointsRef.current = [{ x, y, pressure: e.pressure || 0.5 }];
         setIsDrawing(true);
-    }, []);
+    }, [currentTool, selectImage]);
 
     // Pointer Move - Continue drawing
     const handlePointerMove = useCallback((e: React.PointerEvent) => {

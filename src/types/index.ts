@@ -14,7 +14,7 @@ export interface Stroke {
     isEraser: boolean;
 }
 
-export type Tool = 'pen' | 'eraser';
+export type Tool = 'pen' | 'eraser' | 'select';
 
 export type Pattern = 'none' | 'grid' | 'dots' | 'lines';
 
@@ -45,6 +45,7 @@ export interface AppState {
     historyStack: ActionItem[];
     redoStack: ActionItem[];
     currentTool: Tool;
+    selectedImageId: string | null;
     canvasBackground: string;
     canvasPattern: Pattern;
 }
