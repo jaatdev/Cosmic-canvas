@@ -1,6 +1,7 @@
 'use client';
 
 import { useStore, CanvasImage } from '@/store/useStore';
+import { exportToPdf } from '@/utils/export';
 import {
     Pencil,
     Eraser,
@@ -15,6 +16,7 @@ import {
     Redo2,
     Image as ImageIcon,
     Hand,
+    Download,
     X
 } from 'lucide-react';
 import { useRef, useState, useEffect, useCallback } from 'react';
@@ -52,7 +54,7 @@ const calculateSmartScale = (
 const generateId = () => `img-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
 /**
- * Toolbar Component - The Toggleable Cockpit with Select Tool
+ * Toolbar Component - The Toggleable Cockpit with Export
  */
 export default function Toolbar() {
     const {
@@ -64,6 +66,9 @@ export default function Toolbar() {
         canvasPattern,
         historyStack,
         redoStack,
+        strokes,
+        images,
+        projectName,
         setTool,
         setPenColor,
         setPenWidth,
@@ -82,6 +87,7 @@ export default function Toolbar() {
 
     const [activePanel, setActivePanel] = useState<ActivePanel>('none');
     const [isFullscreen, setIsFullscreen] = useState(false);
+    const [isExporting, setIsExporting] = useState(false);
 
     const isPen = currentTool === 'pen';
     const isEraser = currentTool === 'eraser';
@@ -117,6 +123,27 @@ export default function Toolbar() {
             console.error('Fullscreen error:', err);
         }
     }, []);
+
+    // Handle PDF export
+    const handleExport = useCallback(async () => {
+        if (isExporting) return;
+
+        setIsExporting(true);
+        try {
+            await exportToPdf(strokes, images, {
+                projectName,
+                background: canvasBackground,
+                pattern: canvasPattern,
+                width: window.innerWidth,
+                height: window.innerHeight,
+            });
+        } catch (error) {
+            console.error('Export failed:', error);
+            alert('Failed to export PDF. Please try again.');
+        } finally {
+            setIsExporting(false);
+        }
+    }, [strokes, images, projectName, canvasBackground, canvasPattern, isExporting]);
 
     // Handle image upload with smart scaling
     const handleImageUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -175,7 +202,7 @@ export default function Toolbar() {
     // Handle Select icon click
     const handleSelectClick = () => {
         setTool('select');
-        setActivePanel('none'); // No panel for select tool
+        setActivePanel('none');
     };
 
     // Handle Background icon click
@@ -483,6 +510,19 @@ export default function Toolbar() {
 
                 {/* Divider */}
                 <div className="w-8 h-px bg-white/20 my-1" />
+
+                {/* Export PDF */}
+                <button
+                    onClick={handleExport}
+                    disabled={isExporting}
+                    className={`p-3 rounded-xl transition-all ${isExporting
+                            ? 'bg-white/5 opacity-50 cursor-wait'
+                            : 'bg-white/5 hover:bg-green-500/30 hover:scale-110'
+                        }`}
+                    title="Export PDF"
+                >
+                    <Download className={`w-5 h-5 ${isExporting ? 'animate-pulse' : ''} text-white/60`} />
+                </button>
 
                 {/* Fullscreen Toggle */}
                 <button

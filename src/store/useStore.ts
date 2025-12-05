@@ -15,6 +15,7 @@ interface CanvasState {
     redoStack: ActionItem[];
     currentTool: Tool;
     selectedImageId: string | null;
+    projectName: string;
 
     // Separate widths for pen and eraser
     penColor: string;
@@ -33,6 +34,7 @@ interface CanvasState {
     undo: () => void;
     redo: () => void;
     setTool: (tool: Tool) => void;
+    setProjectName: (name: string) => void;
     setPenColor: (color: string) => void;
     setPenWidth: (width: number) => void;
     setEraserWidth: (width: number) => void;
@@ -53,6 +55,7 @@ export const useStore = create<CanvasState>((set, get) => ({
     redoStack: [],
     currentTool: 'pen',
     selectedImageId: null,
+    projectName: 'Untitled Universe',
 
     // Separate widths
     penColor: '#000000',
@@ -90,7 +93,6 @@ export const useStore = create<CanvasState>((set, get) => ({
             images: [...state.images, image],
             historyStack: [...state.historyStack, { type: 'image', data: image }],
             redoStack: [],
-            // Auto-switch to select tool and select the new image
             currentTool: 'select',
             selectedImageId: image.id,
         });
@@ -101,7 +103,7 @@ export const useStore = create<CanvasState>((set, get) => ({
         set({ selectedImageId: id });
     },
 
-    // Update image properties (position, size, etc.)
+    // Update image properties
     updateImage: (id, updates) => {
         set((state) => ({
             images: state.images.map((img) =>
@@ -110,7 +112,7 @@ export const useStore = create<CanvasState>((set, get) => ({
         }));
     },
 
-    // Unified undo - works for both strokes and images
+    // Unified undo
     undo: () => {
         const state = get();
         if (state.historyStack.length === 0) return;
@@ -129,13 +131,12 @@ export const useStore = create<CanvasState>((set, get) => ({
                 images: state.images.filter(i => i.id !== lastAction.data.id),
                 historyStack: newHistoryStack,
                 redoStack: [...state.redoStack, lastAction],
-                // Deselect if we're undoing the selected image
                 selectedImageId: state.selectedImageId === lastAction.data.id ? null : state.selectedImageId,
             });
         }
     },
 
-    // Unified redo - works for both strokes and images
+    // Unified redo
     redo: () => {
         const state = get();
         if (state.redoStack.length === 0) return;
@@ -158,14 +159,16 @@ export const useStore = create<CanvasState>((set, get) => ({
         }
     },
 
-    // Set current tool (deselects images when switching away from select)
+    // Set current tool
     setTool: (tool) => {
         set({
             currentTool: tool,
-            // Deselect image when switching away from select tool
             selectedImageId: tool !== 'select' ? null : get().selectedImageId,
         });
     },
+
+    // Set project name
+    setProjectName: (name) => set({ projectName: name }),
 
     // Pen settings
     setPenColor: (color) => set({ penColor: color }),
