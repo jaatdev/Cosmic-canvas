@@ -16,6 +16,8 @@ interface CanvasState {
     currentTool: Tool;
     selectedImageId: string | null;
     projectName: string;
+    pageCount: number;
+    pageHeight: number;
 
     // Separate widths for pen and eraser
     penColor: string;
@@ -35,6 +37,8 @@ interface CanvasState {
     redo: () => void;
     setTool: (tool: Tool) => void;
     setProjectName: (name: string) => void;
+    addPage: () => void;
+    setPageHeight: (height: number) => void;
     setPenColor: (color: string) => void;
     setPenWidth: (width: number) => void;
     setEraserWidth: (width: number) => void;
@@ -45,6 +49,7 @@ interface CanvasState {
     // Computed helpers
     canUndo: () => boolean;
     canRedo: () => boolean;
+    getTotalHeight: () => number;
 }
 
 export const useStore = create<CanvasState>((set, get) => ({
@@ -56,6 +61,8 @@ export const useStore = create<CanvasState>((set, get) => ({
     currentTool: 'pen',
     selectedImageId: null,
     projectName: 'Untitled Universe',
+    pageCount: 1,
+    pageHeight: 0, // Will be set on mount
 
     // Separate widths
     penColor: '#000000',
@@ -170,6 +177,14 @@ export const useStore = create<CanvasState>((set, get) => ({
     // Set project name
     setProjectName: (name) => set({ projectName: name }),
 
+    // Add a new page
+    addPage: () => {
+        set((state) => ({ pageCount: state.pageCount + 1 }));
+    },
+
+    // Set page height (called once on mount)
+    setPageHeight: (height) => set({ pageHeight: height }),
+
     // Pen settings
     setPenColor: (color) => set({ penColor: color }),
     setPenWidth: (width) => set({ penWidth: Math.max(1, Math.min(50, width)) }),
@@ -188,11 +203,13 @@ export const useStore = create<CanvasState>((set, get) => ({
         historyStack: [],
         redoStack: [],
         selectedImageId: null,
+        pageCount: 1, // Reset to single page
     }),
 
     // Computed helpers
     canUndo: () => get().historyStack.length > 0,
     canRedo: () => get().redoStack.length > 0,
+    getTotalHeight: () => get().pageCount * get().pageHeight,
 }));
 
 export default useStore;

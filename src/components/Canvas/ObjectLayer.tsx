@@ -3,6 +3,10 @@
 import { useStore } from '@/store/useStore';
 import { useState, useCallback, useRef } from 'react';
 
+interface ObjectLayerProps {
+    totalHeight?: number;
+}
+
 type DragState = {
     type: 'none' | 'move' | 'resize';
     startX: number;
@@ -20,7 +24,7 @@ type DragState = {
  * Renders images below the ink layer but above the background.
  * When select tool is active, images can be moved and resized.
  */
-export default function ObjectLayer() {
+export default function ObjectLayer({ totalHeight }: ObjectLayerProps) {
     const { images, currentTool, selectedImageId, selectImage, updateImage } = useStore();
     const [dragState, setDragState] = useState<DragState>({
         type: 'none',
@@ -102,23 +106,22 @@ export default function ObjectLayer() {
             let newX = dragState.startImgX;
             let newY = dragState.startImgY;
 
-            // Calculate new dimensions based on which handle is being dragged
             switch (dragState.handle) {
-                case 'se': // Bottom-right: width/height increase
+                case 'se':
                     newWidth = Math.max(50, dragState.startImgW + deltaX);
                     newHeight = newWidth / aspectRatio;
                     break;
-                case 'sw': // Bottom-left: x decreases, width increases
+                case 'sw':
                     newWidth = Math.max(50, dragState.startImgW - deltaX);
                     newHeight = newWidth / aspectRatio;
                     newX = dragState.startImgX + (dragState.startImgW - newWidth);
                     break;
-                case 'ne': // Top-right: y decreases, height shrinks from top
+                case 'ne':
                     newWidth = Math.max(50, dragState.startImgW + deltaX);
                     newHeight = newWidth / aspectRatio;
                     newY = dragState.startImgY + (dragState.startImgH - newHeight);
                     break;
-                case 'nw': // Top-left: both x and y decrease
+                case 'nw':
                     newWidth = Math.max(50, dragState.startImgW - deltaX);
                     newHeight = newWidth / aspectRatio;
                     newX = dragState.startImgX + (dragState.startImgW - newWidth);
@@ -163,7 +166,7 @@ export default function ObjectLayer() {
                 position: 'absolute',
                 inset: 0,
                 width: '100%',
-                height: '100%',
+                height: totalHeight || '100%',
                 zIndex: 5,
                 pointerEvents: isSelectMode ? 'auto' : 'none',
                 userSelect: 'none',
@@ -202,10 +205,9 @@ export default function ObjectLayer() {
                             }}
                         />
 
-                        {/* Selection Gizmo - only show when selected */}
+                        {/* Selection Gizmo */}
                         {isSelected && isSelectMode && (
                             <>
-                                {/* Corner Handles */}
                                 {(['nw', 'ne', 'sw', 'se'] as const).map((handle) => {
                                     const positions: Record<string, React.CSSProperties> = {
                                         nw: { top: -6, left: -6, cursor: 'nwse-resize' },

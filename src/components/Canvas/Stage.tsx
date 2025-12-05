@@ -31,7 +31,8 @@ const calculateSmartScale = (
     naturalWidth: number,
     naturalHeight: number,
     viewportWidth: number,
-    viewportHeight: number
+    viewportHeight: number,
+    scrollY: number = 0
 ): { width: number; height: number; x: number; y: number } => {
     const maxWidth = Math.min(600, viewportWidth * 0.5);
     const maxHeight = viewportHeight * 0.6;
@@ -41,15 +42,14 @@ const calculateSmartScale = (
     let width = maxWidth;
     let height = width / aspectRatio;
 
-    // If height exceeds max, scale down
     if (height > maxHeight) {
         height = maxHeight;
         width = height * aspectRatio;
     }
 
-    // Center on screen
     const x = (viewportWidth - width) / 2;
-    const y = (viewportHeight - height) / 2;
+    // Place image in center of current viewport
+    const y = scrollY + (viewportHeight - height) / 2;
 
     return { width, height, x, y };
 };
@@ -58,19 +58,43 @@ const calculateSmartScale = (
 const generateId = () => `img-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
 /**
- * Stage Component - Multi-Layer Canvas with Image Support
+ * Stage Component - Multi-Page Scrollable Canvas
  */
 export default function Stage() {
     const staticLayerRef = useRef<HTMLCanvasElement>(null);
     const activeLayerRef = useRef<HTMLCanvasElement>(null);
+    const containerRef = useRef<HTMLDivElement>(null);
     const { width, height, pixelRatio } = useWindowDimensions();
 
     // Zustand store
-    const { strokes, currentTool, penColor, penWidth, eraserWidth, addStroke, addImage, selectImage, undo, redo } = useStore();
+    const {
+        strokes,
+        currentTool,
+        penColor,
+        penWidth,
+        eraserWidth,
+        pageCount,
+        addStroke,
+        addImage,
+        selectImage,
+        setPageHeight,
+        undo,
+        redo
+    } = useStore();
 
     // Local drawing state
     const [isDrawing, setIsDrawing] = useState(false);
     const currentPointsRef = useRef<Point[] | null>(null);
+
+    // Total canvas height
+    const totalHeight = height * pageCount;
+
+    // Set page height on mount
+    useEffect(() => {
+        if (height > 0) {
+            setPageHeight(height);
+        }
+    }, [height, setPageHeight]);
 
     // Get current stroke settings based on tool
     const getCurrentStrokeSettings = useCallback(() => {
@@ -81,7 +105,6 @@ export default function Stage() {
     }, [currentTool, penColor, penWidth, eraserWidth]);
 
     // Draw a single stroke to a canvas context
-    // Uses Pick to only require render-relevant properties (id not needed for drawing)
     const drawStroke = useCallback((
         ctx: CanvasRenderingContext2D,
         stroke: Pick<Stroke, 'points' | 'color' | 'size' | 'isEraser'>
@@ -103,43 +126,73 @@ export default function Stage() {
         ctx.fill(path);
     }, []);
 
+    // Draw page separators
+    const drawPageSeparators = useCallback((ctx: CanvasRenderingContext2D) => {
+        if (pageCount <= 1) return;
+
+        ctx.save();
+        ctx.setLineDash([10, 10]);
+        ctx.strokeStyle = '#3b82f6';
+        ctx.lineWidth = 2;
+        ctx.font = '14px Inter, system-ui, sans-serif';
+        ctx.fillStyle = '#3b82f6';
+
+        for (let i = 1; i < pageCount; i++) {
+            const y = i * height;
+
+            // Draw dashed line
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(width, y);
+            ctx.stroke();
+
+            // Draw page label
+            ctx.fillText(`Page ${i + 1}`, 20, y + 20);
+        }
+
+        ctx.restore();
+    }, [pageCount, width, height]);
+
     // Setup canvas with High-DPI scaling
     const setupCanvas = useCallback((canvas: HTMLCanvasElement | null) => {
-        if (!canvas || width === 0 || height === 0) return null;
+        if (!canvas || width === 0 || totalHeight === 0) return null;
 
         const ctx = canvas.getContext('2d');
         if (!ctx) return null;
 
         canvas.width = width * pixelRatio;
-        canvas.height = height * pixelRatio;
+        canvas.height = totalHeight * pixelRatio;
 
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.scale(pixelRatio, pixelRatio);
 
         return ctx;
-    }, [width, height, pixelRatio]);
+    }, [width, totalHeight, pixelRatio]);
 
-    // Render static layer (stroke history)
+    // Render static layer (stroke history + page separators)
     const renderStaticLayer = useCallback(() => {
         const ctx = setupCanvas(staticLayerRef.current);
         if (!ctx) return;
 
-        ctx.clearRect(0, 0, width, height);
+        ctx.clearRect(0, 0, width, totalHeight);
         strokes.forEach((stroke) => drawStroke(ctx, stroke));
         ctx.globalCompositeOperation = 'source-over';
-    }, [width, height, strokes, setupCanvas, drawStroke]);
+
+        // Draw page separators on top
+        drawPageSeparators(ctx);
+    }, [width, totalHeight, strokes, setupCanvas, drawStroke, drawPageSeparators]);
 
     // Render active layer (current stroke only)
     const renderActiveLayer = useCallback(() => {
         const canvas = activeLayerRef.current;
-        if (!canvas || width === 0 || height === 0) return;
+        if (!canvas || width === 0 || totalHeight === 0) return;
 
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
 
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.scale(pixelRatio, pixelRatio);
-        ctx.clearRect(0, 0, width, height);
+        ctx.clearRect(0, 0, width, totalHeight);
 
         const currentPoints = currentPointsRef.current;
         if (currentPoints && currentPoints.length >= 2) {
@@ -158,18 +211,18 @@ export default function Stage() {
 
             ctx.globalCompositeOperation = 'source-over';
         }
-    }, [width, height, pixelRatio, getCurrentStrokeSettings, drawStroke]);
+    }, [width, totalHeight, pixelRatio, getCurrentStrokeSettings, drawStroke]);
 
-    // Setup canvases on mount/resize
+    // Setup canvases on mount/resize/page change
     useEffect(() => {
         setupCanvas(staticLayerRef.current);
         setupCanvas(activeLayerRef.current);
-    }, [width, height, pixelRatio, setupCanvas]);
+    }, [width, totalHeight, pixelRatio, setupCanvas]);
 
-    // Re-render static layer when stroke history changes
+    // Re-render static layer when stroke history or page count changes
     useEffect(() => {
         renderStaticLayer();
-    }, [strokes, renderStaticLayer]);
+    }, [strokes, pageCount, renderStaticLayer]);
 
     // Process image blob and add to canvas with smart scaling
     const processImageBlob = useCallback((blob: Blob) => {
@@ -180,8 +233,9 @@ export default function Stage() {
             const { width: scaledWidth, height: scaledHeight, x, y } = calculateSmartScale(
                 img.naturalWidth,
                 img.naturalHeight,
-                window.innerWidth,
-                window.innerHeight
+                width,
+                height,
+                window.scrollY
             );
 
             const canvasImage: CanvasImage = {
@@ -196,13 +250,12 @@ export default function Stage() {
             };
 
             addImage(canvasImage);
-            console.log(`Image added: ${img.naturalWidth}x${img.naturalHeight} -> ${scaledWidth.toFixed(0)}x${scaledHeight.toFixed(0)}`);
         };
 
         img.src = url;
-    }, [addImage]);
+    }, [addImage, width, height]);
 
-    // Paste event handler (Smart Paste Engine)
+    // Paste event handler
     useEffect(() => {
         const handlePaste = (e: ClipboardEvent) => {
             const items = e.clipboardData?.items;
@@ -224,7 +277,7 @@ export default function Stage() {
         return () => window.removeEventListener('paste', handlePaste);
     }, [processImageBlob]);
 
-    // Keyboard Shortcuts: Undo (Ctrl+Z) and Redo (Ctrl+Y or Ctrl+Shift+Z)
+    // Keyboard Shortcuts
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             const isCtrlOrCmd = e.ctrlKey || e.metaKey;
@@ -257,7 +310,7 @@ export default function Stage() {
         const container = e.currentTarget as HTMLElement;
         const rect = container.getBoundingClientRect();
         const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
+        const y = e.clientY - rect.top + window.scrollY;
 
         (e.target as HTMLElement).setPointerCapture(e.pointerId);
 
@@ -273,7 +326,7 @@ export default function Stage() {
         const container = e.currentTarget as HTMLElement;
         const rect = container.getBoundingClientRect();
         const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
+        const y = e.clientY - rect.top + window.scrollY;
 
         if (currentPointsRef.current) {
             currentPointsRef.current.push({ x, y, pressure: e.pressure || 0.5 });
@@ -336,13 +389,15 @@ export default function Stage() {
 
     return (
         <div
+            ref={containerRef}
             style={{
                 position: 'relative',
                 width: '100vw',
-                height: '100vh',
-                overflow: 'hidden',
+                height: totalHeight,
+                minHeight: '100vh',
+                overflow: 'visible',
                 touchAction: 'none',
-                cursor: currentTool === 'eraser' ? 'cell' : 'crosshair',
+                cursor: currentTool === 'eraser' ? 'cell' : currentTool === 'select' ? 'default' : 'crosshair',
             }}
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
@@ -350,12 +405,12 @@ export default function Stage() {
             onPointerLeave={handlePointerLeave}
         >
             {/* Z-Index 0: Background */}
-            <BackgroundLayer />
+            <BackgroundLayer totalHeight={totalHeight} />
 
             {/* Z-Index 5: Images */}
-            <ObjectLayer />
+            <ObjectLayer totalHeight={totalHeight} />
 
-            {/* Z-Index 10: Stroke History */}
+            {/* Z-Index 10: Stroke History + Page Separators */}
             <canvas
                 ref={staticLayerRef}
                 style={{ ...canvasStyle, zIndex: 10, pointerEvents: 'none' }}

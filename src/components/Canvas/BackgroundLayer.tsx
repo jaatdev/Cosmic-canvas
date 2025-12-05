@@ -4,11 +4,14 @@ import { useStore } from '@/store/useStore';
 import { Pattern } from '@/types';
 import { useMemo } from 'react';
 
+interface BackgroundLayerProps {
+    totalHeight?: number;
+}
+
 /**
  * Get CSS background pattern based on pattern type
  */
 function getPatternCSS(pattern: Pattern, backgroundColor: string): React.CSSProperties {
-    // Calculate contrasting pattern color
     const patternColor = isLightColor(backgroundColor)
         ? 'rgba(0, 0, 0, 0.08)'
         : 'rgba(255, 255, 255, 0.08)';
@@ -59,7 +62,7 @@ function isLightColor(hex: string): boolean {
  * Full-screen background with customizable color and pattern.
  * Sits below the canvas layers.
  */
-export default function BackgroundLayer() {
+export default function BackgroundLayer({ totalHeight }: BackgroundLayerProps) {
     const { canvasBackground, canvasPattern } = useStore();
 
     const patternStyles = useMemo(() =>
@@ -73,7 +76,7 @@ export default function BackgroundLayer() {
                 position: 'absolute',
                 inset: 0,
                 width: '100%',
-                height: '100%',
+                height: totalHeight || '100%',
                 backgroundColor: canvasBackground,
                 zIndex: 0,
                 pointerEvents: 'none',

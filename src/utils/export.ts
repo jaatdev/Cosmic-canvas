@@ -8,10 +8,11 @@ interface ExportConfig {
     background: string;
     pattern: Pattern;
     width: number;
-    height: number;
+    pageHeight: number;
+    pageCount: number;
 }
 
-// perfect-freehand options (same as Stage.tsx)
+// perfect-freehand options
 const getStrokeOptions = (size: number) => ({
     size,
     thinning: 0.5,
@@ -36,7 +37,7 @@ const drawPattern = (
 
     switch (pattern) {
         case 'grid':
-            const gridSize = 30;
+            const gridSize = 24;
             ctx.beginPath();
             for (let x = 0; x <= width; x += gridSize) {
                 ctx.moveTo(x, 0);
@@ -50,7 +51,7 @@ const drawPattern = (
             break;
 
         case 'dots':
-            const dotSpacing = 25;
+            const dotSpacing = 20;
             ctx.fillStyle = 'rgba(0, 0, 0, 0.15)';
             for (let x = dotSpacing; x < width; x += dotSpacing) {
                 for (let y = dotSpacing; y < height; y += dotSpacing) {
@@ -62,7 +63,7 @@ const drawPattern = (
             break;
 
         case 'lines':
-            const lineSpacing = 30;
+            const lineSpacing = 28;
             ctx.beginPath();
             for (let y = lineSpacing; y < height; y += lineSpacing) {
                 ctx.moveTo(0, y);
@@ -73,7 +74,7 @@ const drawPattern = (
     }
 };
 
-// Load image from URL and return as HTMLImageElement
+// Load image from URL
 const loadImage = (url: string): Promise<HTMLImageElement> => {
     return new Promise((resolve, reject) => {
         const img = new Image();
@@ -87,7 +88,8 @@ const loadImage = (url: string): Promise<HTMLImageElement> => {
 // Draw a stroke on canvas
 const drawStroke = (
     ctx: CanvasRenderingContext2D,
-    stroke: Stroke
+    stroke: Stroke,
+    offsetY: number = 0
 ) => {
     if (stroke.points.length < 2) return;
 
@@ -97,7 +99,8 @@ const drawStroke = (
         ctx.globalCompositeOperation = 'source-over';
     }
 
-    const inputPoints = stroke.points.map(p => [p.x, p.y, p.pressure]);
+    // Offset stroke points for page slicing
+    const inputPoints = stroke.points.map(p => [p.x, p.y - offsetY, p.pressure]);
     const strokeOutline = getStroke(inputPoints, getStrokeOptions(stroke.size));
     const pathData = getSvgPathFromStroke(strokeOutline);
     const path = new Path2D(pathData);
@@ -107,57 +110,87 @@ const drawStroke = (
 };
 
 /**
- * Export canvas content to PDF
+ * Export canvas content to multi-page PDF
  */
 export const exportToPdf = async (
     strokes: Stroke[],
     images: CanvasImage[],
     config: ExportConfig
 ): Promise<void> => {
-    const { width, height, projectName, background, pattern } = config;
+    const { width, pageHeight, pageCount, projectName, background, pattern } = config;
 
-    // Create temporary canvas
-    const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) throw new Error('Failed to get canvas context');
-
-    // Layer 1: Background
-    ctx.fillStyle = background;
-    ctx.fillRect(0, 0, width, height);
-
-    // Layer 1.5: Pattern
-    drawPattern(ctx, pattern, width, height);
-
-    // Layer 2: Images
-    for (const img of images) {
-        try {
-            const loadedImg = await loadImage(img.url);
-            ctx.drawImage(loadedImg, img.x, img.y, img.width, img.height);
-        } catch (error) {
-            console.warn(`Failed to load image ${img.id}:`, error);
-        }
-    }
-
-    // Layer 3: Strokes
-    ctx.globalCompositeOperation = 'source-over';
-    for (const stroke of strokes) {
-        drawStroke(ctx, stroke);
-    }
-    ctx.globalCompositeOperation = 'source-over';
-
-    // Generate PDF
-    const orientation = width > height ? 'landscape' : 'portrait';
+    // Create PDF with landscape/portrait based on page dimensions
+    const orientation = width > pageHeight ? 'landscape' : 'portrait';
     const pdf = new jsPDF({
         orientation,
         unit: 'px',
-        format: [width, height],
+        format: [width, pageHeight],
     });
 
-    // Add canvas as image to PDF
-    const imgData = canvas.toDataURL('image/png');
-    pdf.addImage(imgData, 'PNG', 0, 0, width, height);
+    // Process each page
+    for (let pageIndex = 0; pageIndex < pageCount; pageIndex++) {
+        const pageY = pageIndex * pageHeight;
+
+        // Create temporary canvas for this page
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = pageHeight;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) throw new Error('Failed to get canvas context');
+
+        // Layer 1: Background
+        ctx.fillStyle = background;
+        ctx.fillRect(0, 0, width, pageHeight);
+
+        // Layer 1.5: Pattern
+        drawPattern(ctx, pattern, width, pageHeight);
+
+        // Layer 2: Images (only those visible on this page)
+        for (const img of images) {
+            // Check if image overlaps with this page
+            const imgTop = img.y;
+            const imgBottom = img.y + img.height;
+            const pageTop = pageY;
+            const pageBottom = pageY + pageHeight;
+
+            if (imgBottom > pageTop && imgTop < pageBottom) {
+                try {
+                    const loadedImg = await loadImage(img.url);
+                    // Draw with page-relative coordinates
+                    ctx.drawImage(
+                        loadedImg,
+                        img.x,
+                        img.y - pageY,
+                        img.width,
+                        img.height
+                    );
+                } catch (error) {
+                    console.warn(`Failed to load image ${img.id}:`, error);
+                }
+            }
+        }
+
+        // Layer 3: Strokes (only those visible on this page)
+        ctx.globalCompositeOperation = 'source-over';
+        for (const stroke of strokes) {
+            // Check if any stroke points are on this page
+            const strokeMinY = Math.min(...stroke.points.map(p => p.y));
+            const strokeMaxY = Math.max(...stroke.points.map(p => p.y));
+
+            if (strokeMaxY > pageY && strokeMinY < pageY + pageHeight) {
+                drawStroke(ctx, stroke, pageY);
+            }
+        }
+        ctx.globalCompositeOperation = 'source-over';
+
+        // Add page to PDF
+        if (pageIndex > 0) {
+            pdf.addPage([width, pageHeight], orientation);
+        }
+
+        const imgData = canvas.toDataURL('image/png');
+        pdf.addImage(imgData, 'PNG', 0, 0, width, pageHeight);
+    }
 
     // Save PDF
     pdf.save(`${projectName}.pdf`);

@@ -69,6 +69,8 @@ export default function Toolbar() {
         strokes,
         images,
         projectName,
+        pageCount,
+        pageHeight,
         setTool,
         setPenColor,
         setPenWidth,
@@ -135,7 +137,8 @@ export default function Toolbar() {
                 background: canvasBackground,
                 pattern: canvasPattern,
                 width: window.innerWidth,
-                height: window.innerHeight,
+                pageHeight: pageHeight || window.innerHeight,
+                pageCount,
             });
         } catch (error) {
             console.error('Export failed:', error);
@@ -143,7 +146,7 @@ export default function Toolbar() {
         } finally {
             setIsExporting(false);
         }
-    }, [strokes, images, projectName, canvasBackground, canvasPattern, isExporting]);
+    }, [strokes, images, projectName, canvasBackground, canvasPattern, pageHeight, pageCount, isExporting]);
 
     // Handle image upload with smart scaling
     const handleImageUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -373,8 +376,8 @@ export default function Toolbar() {
                                         key={p.id}
                                         onClick={() => handlePatternSelect(p.id)}
                                         className={`p-2 rounded-lg transition-all hover:scale-110 ${canvasPattern === p.id
-                                                ? 'bg-white/25 ring-2 ring-white/50'
-                                                : 'bg-white/10 hover:bg-white/15'
+                                            ? 'bg-white/25 ring-2 ring-white/50'
+                                            : 'bg-white/10 hover:bg-white/15'
                                             }`}
                                         title={p.label}
                                     >
@@ -406,8 +409,8 @@ export default function Toolbar() {
                 <button
                     onClick={handleSelectClick}
                     className={`relative p-3 rounded-xl transition-all hover:scale-110 ${isSelect
-                            ? 'bg-white/25 ring-2 ring-white/50'
-                            : 'bg-white/5 hover:bg-white/10'
+                        ? 'bg-white/25 ring-2 ring-white/50'
+                        : 'bg-white/5 hover:bg-white/10'
                         }`}
                     title="Select Tool (V)"
                 >
@@ -418,8 +421,8 @@ export default function Toolbar() {
                 <button
                     onClick={handlePenClick}
                     className={`relative p-3 rounded-xl transition-all hover:scale-110 ${isPen
-                            ? 'bg-white/25 ring-2 ring-white/50'
-                            : 'bg-white/5 hover:bg-white/10'
+                        ? 'bg-white/25 ring-2 ring-white/50'
+                        : 'bg-white/5 hover:bg-white/10'
                         }`}
                     title="Pen Tool (P)"
                 >
@@ -433,8 +436,8 @@ export default function Toolbar() {
                 <button
                     onClick={handleEraserClick}
                     className={`relative p-3 rounded-xl transition-all hover:scale-110 ${isEraser
-                            ? 'bg-white/25 ring-2 ring-white/50'
-                            : 'bg-white/5 hover:bg-white/10'
+                        ? 'bg-white/25 ring-2 ring-white/50'
+                        : 'bg-white/5 hover:bg-white/10'
                         }`}
                     title="Eraser Tool (E)"
                 >
@@ -469,8 +472,8 @@ export default function Toolbar() {
                     onClick={undo}
                     disabled={!canUndoAction}
                     className={`p-3 rounded-xl transition-all ${canUndoAction
-                            ? 'bg-white/5 hover:bg-white/15 hover:scale-110'
-                            : 'bg-white/5 opacity-30 cursor-not-allowed'
+                        ? 'bg-white/5 hover:bg-white/15 hover:scale-110'
+                        : 'bg-white/5 opacity-30 cursor-not-allowed'
                         }`}
                     title="Undo (Ctrl+Z)"
                 >
@@ -482,8 +485,8 @@ export default function Toolbar() {
                     onClick={redo}
                     disabled={!canRedoAction}
                     className={`p-3 rounded-xl transition-all ${canRedoAction
-                            ? 'bg-white/5 hover:bg-white/15 hover:scale-110'
-                            : 'bg-white/5 opacity-30 cursor-not-allowed'
+                        ? 'bg-white/5 hover:bg-white/15 hover:scale-110'
+                        : 'bg-white/5 opacity-30 cursor-not-allowed'
                         }`}
                     title="Redo (Ctrl+Y)"
                 >
@@ -497,8 +500,8 @@ export default function Toolbar() {
                 <button
                     onClick={handleBgClick}
                     className={`relative p-3 rounded-xl transition-all hover:scale-110 ${activePanel === 'bg'
-                            ? 'bg-white/25 ring-2 ring-white/50'
-                            : 'bg-white/5 hover:bg-white/10'
+                        ? 'bg-white/25 ring-2 ring-white/50'
+                        : 'bg-white/5 hover:bg-white/10'
                         }`}
                     title="Paper Settings"
                 >
@@ -516,8 +519,8 @@ export default function Toolbar() {
                     onClick={handleExport}
                     disabled={isExporting}
                     className={`p-3 rounded-xl transition-all ${isExporting
-                            ? 'bg-white/5 opacity-50 cursor-wait'
-                            : 'bg-white/5 hover:bg-green-500/30 hover:scale-110'
+                        ? 'bg-white/5 opacity-50 cursor-wait'
+                        : 'bg-white/5 hover:bg-green-500/30 hover:scale-110'
                         }`}
                     title="Export PDF"
                 >
