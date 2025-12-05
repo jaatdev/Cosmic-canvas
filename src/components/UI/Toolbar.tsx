@@ -24,12 +24,13 @@ import { Pattern } from '@/types';
 
 type ActivePanel = 'none' | 'pen' | 'eraser' | 'bg';
 
-// Smart Scale: Calculate dimensions to fit viewport
+// Smart Scale: Calculate dimensions to fit viewport (with scroll offset)
 const calculateSmartScale = (
     naturalWidth: number,
     naturalHeight: number,
     viewportWidth: number,
-    viewportHeight: number
+    viewportHeight: number,
+    scrollY: number = 0
 ): { width: number; height: number; x: number; y: number } => {
     const maxWidth = Math.min(600, viewportWidth * 0.5);
     const maxHeight = viewportHeight * 0.6;
@@ -45,7 +46,8 @@ const calculateSmartScale = (
     }
 
     const x = (viewportWidth - width) / 2;
-    const y = (viewportHeight - height) / 2;
+    // Center on current viewport (add scrollY)
+    const y = scrollY + (viewportHeight - height) / 2;
 
     return { width, height, x, y };
 };
@@ -157,11 +159,14 @@ export default function Toolbar() {
         const img = new Image();
 
         img.onload = () => {
+            // Use current scroll position for placement
+            const scrollY = window.scrollY || window.pageYOffset || 0;
             const { width, height, x, y } = calculateSmartScale(
                 img.naturalWidth,
                 img.naturalHeight,
                 window.innerWidth,
-                window.innerHeight
+                window.innerHeight,
+                scrollY
             );
 
             const canvasImage: CanvasImage = {

@@ -26,7 +26,7 @@ const getStrokeOptions = (size: number) => ({
     },
 });
 
-// Smart Scale: Calculate dimensions to fit viewport
+// Smart Scale: Calculate dimensions to fit viewport (centered on current view)
 const calculateSmartScale = (
     naturalWidth: number,
     naturalHeight: number,
@@ -47,8 +47,9 @@ const calculateSmartScale = (
         width = height * aspectRatio;
     }
 
+    // Horizontal center
     const x = (viewportWidth - width) / 2;
-    // Place image in center of current viewport
+    // Vertical center of current viewport
     const y = scrollY + (viewportHeight - height) / 2;
 
     return { width, height, x, y };
@@ -59,6 +60,8 @@ const generateId = () => `img-${Date.now()}-${Math.random().toString(36).substr(
 
 /**
  * Stage Component - Multi-Page Scrollable Canvas
+ * 
+ * Uses pageX/pageY for correct coordinates on scrolled pages.
  */
 export default function Stage() {
     const staticLayerRef = useRef<HTMLCanvasElement>(null);
@@ -86,7 +89,7 @@ export default function Stage() {
     const [isDrawing, setIsDrawing] = useState(false);
     const currentPointsRef = useRef<Point[] | null>(null);
 
-    // Total canvas height
+    // Total canvas height (all pages)
     const totalHeight = height * pageCount;
 
     // Set page height on mount
@@ -153,15 +156,21 @@ export default function Stage() {
         ctx.restore();
     }, [pageCount, width, height]);
 
-    // Setup canvas with High-DPI scaling
-    const setupCanvas = useCallback((canvas: HTMLCanvasElement | null) => {
+    // Setup canvas with High-DPI scaling - MUST update on pageCount change
+    const setupCanvas = useCallback((canvas: HTMLCanvasElement | null, forceRedraw: boolean = false) => {
         if (!canvas || width === 0 || totalHeight === 0) return null;
 
         const ctx = canvas.getContext('2d');
         if (!ctx) return null;
 
-        canvas.width = width * pixelRatio;
-        canvas.height = totalHeight * pixelRatio;
+        // Only resize if dimensions changed (resizing clears canvas)
+        const targetWidth = width * pixelRatio;
+        const targetHeight = totalHeight * pixelRatio;
+
+        if (canvas.width !== targetWidth || canvas.height !== targetHeight || forceRedraw) {
+            canvas.width = targetWidth;
+            canvas.height = targetHeight;
+        }
 
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.scale(pixelRatio, pixelRatio);
@@ -171,16 +180,32 @@ export default function Stage() {
 
     // Render static layer (stroke history + page separators)
     const renderStaticLayer = useCallback(() => {
-        const ctx = setupCanvas(staticLayerRef.current);
+        const canvas = staticLayerRef.current;
+        if (!canvas || width === 0 || totalHeight === 0) return;
+
+        const ctx = canvas.getContext('2d');
         if (!ctx) return;
 
+        // Resize canvas if needed
+        const targetWidth = width * pixelRatio;
+        const targetHeight = totalHeight * pixelRatio;
+
+        if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
+            canvas.width = targetWidth;
+            canvas.height = targetHeight;
+        }
+
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.scale(pixelRatio, pixelRatio);
         ctx.clearRect(0, 0, width, totalHeight);
+
+        // Draw all strokes
         strokes.forEach((stroke) => drawStroke(ctx, stroke));
         ctx.globalCompositeOperation = 'source-over';
 
         // Draw page separators on top
         drawPageSeparators(ctx);
-    }, [width, totalHeight, strokes, setupCanvas, drawStroke, drawPageSeparators]);
+    }, [width, totalHeight, pixelRatio, strokes, drawStroke, drawPageSeparators]);
 
     // Render active layer (current stroke only)
     const renderActiveLayer = useCallback(() => {
@@ -189,6 +214,15 @@ export default function Stage() {
 
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
+
+        // Resize canvas if needed
+        const targetWidth = width * pixelRatio;
+        const targetHeight = totalHeight * pixelRatio;
+
+        if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
+            canvas.width = targetWidth;
+            canvas.height = targetHeight;
+        }
 
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.scale(pixelRatio, pixelRatio);
@@ -213,12 +247,6 @@ export default function Stage() {
         }
     }, [width, totalHeight, pixelRatio, getCurrentStrokeSettings, drawStroke]);
 
-    // Setup canvases on mount/resize/page change
-    useEffect(() => {
-        setupCanvas(staticLayerRef.current);
-        setupCanvas(activeLayerRef.current);
-    }, [width, totalHeight, pixelRatio, setupCanvas]);
-
     // Re-render static layer when stroke history or page count changes
     useEffect(() => {
         renderStaticLayer();
@@ -230,12 +258,15 @@ export default function Stage() {
         const img = new Image();
 
         img.onload = () => {
+            // Get current scroll position for centering
+            const scrollY = window.scrollY || window.pageYOffset || 0;
+
             const { width: scaledWidth, height: scaledHeight, x, y } = calculateSmartScale(
                 img.naturalWidth,
                 img.naturalHeight,
                 width,
                 height,
-                window.scrollY
+                scrollY
             );
 
             const canvasImage: CanvasImage = {
@@ -277,6 +308,46 @@ export default function Stage() {
         return () => window.removeEventListener('paste', handlePaste);
     }, [processImageBlob]);
 
+    // Full-page scroll: One wheel tick = one page jump (like PowerPoint/notebook)
+    useEffect(() => {
+        let isScrolling = false; // Debounce to prevent multiple triggers
+
+        const handleWheel = (e: WheelEvent) => {
+            // Skip if currently scrolling or drawing
+            if (isScrolling) return;
+
+            e.preventDefault();
+            isScrolling = true;
+
+            const currentScrollY = window.scrollY;
+            const currentPage = Math.round(currentScrollY / height);
+
+            let targetPage: number;
+            if (e.deltaY > 0) {
+                // Scroll down → next page
+                targetPage = Math.min(currentPage + 1, pageCount - 1);
+            } else {
+                // Scroll up → previous page
+                targetPage = Math.max(currentPage - 1, 0);
+            }
+
+            const targetY = targetPage * height;
+
+            window.scrollTo({
+                top: targetY,
+                behavior: 'smooth'
+            });
+
+            // Reset debounce after animation completes
+            setTimeout(() => {
+                isScrolling = false;
+            }, 500);
+        };
+
+        window.addEventListener('wheel', handleWheel, { passive: false });
+        return () => window.removeEventListener('wheel', handleWheel);
+    }, [height, pageCount]);
+
     // Keyboard Shortcuts
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -298,6 +369,7 @@ export default function Stage() {
     }, [undo, redo]);
 
     // Pointer Down - Start drawing or deselect
+    // Uses pageX/pageY for document-relative coordinates
     const handlePointerDown = useCallback((e: React.PointerEvent) => {
         if (e.pointerType === 'touch') return;
 
@@ -307,10 +379,10 @@ export default function Stage() {
             return;
         }
 
-        const container = e.currentTarget as HTMLElement;
-        const rect = container.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top + window.scrollY;
+        // Use pageX/pageY for correct document-relative coordinates
+        // pageX = clientX + scrollX, pageY = clientY + scrollY
+        const x = e.pageX;
+        const y = e.pageY;
 
         (e.target as HTMLElement).setPointerCapture(e.pointerId);
 
@@ -323,10 +395,9 @@ export default function Stage() {
         if (!isDrawing) return;
         if (e.pointerType === 'touch') return;
 
-        const container = e.currentTarget as HTMLElement;
-        const rect = container.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top + window.scrollY;
+        // Use pageX/pageY for correct document-relative coordinates
+        const x = e.pageX;
+        const y = e.pageY;
 
         if (currentPointsRef.current) {
             currentPointsRef.current.push({ x, y, pressure: e.pressure || 0.5 });
@@ -404,6 +475,24 @@ export default function Stage() {
             onPointerUp={handlePointerUp}
             onPointerLeave={handlePointerLeave}
         >
+            {/* Scroll Snap Targets - invisible page markers for notebook-style scrolling */}
+            {Array.from({ length: pageCount }).map((_, i) => (
+                <div
+                    key={`page-snap-${i}`}
+                    className="page-snap"
+                    style={{
+                        position: 'absolute',
+                        top: i * height,
+                        left: 0,
+                        width: '100%',
+                        height: height,
+                        scrollSnapAlign: 'start',
+                        scrollSnapStop: 'always', // Forces stop on every page
+                        pointerEvents: 'none',
+                    }}
+                />
+            ))}
+
             {/* Z-Index 0: Background */}
             <BackgroundLayer totalHeight={totalHeight} />
 
