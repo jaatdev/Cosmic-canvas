@@ -19,7 +19,8 @@ import {
     Hand,
     Download,
     ZoomIn,
-    X
+    X,
+    FilePlus
 } from 'lucide-react';
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { Pattern } from '@/types';
@@ -56,7 +57,9 @@ const calculateSmartScale = (
 const generateId = () => `img-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
 /**
- * Toolbar Component - The Toggleable Cockpit with Export
+ * Toolbar Component - The Gravity Dock (Bottom-Center)
+ * 
+ * Mac-style dock with grouped tools, upward panels, and auto-close behavior.
  */
 export default function Toolbar() {
     const {
@@ -82,6 +85,7 @@ export default function Toolbar() {
         setCanvasBackground,
         setCanvasPattern,
         addImage,
+        addPage,
         undo,
         redo,
         clearCanvas,
@@ -94,6 +98,7 @@ export default function Toolbar() {
     const penColorRef = useRef<HTMLInputElement>(null);
     const bgColorRef = useRef<HTMLInputElement>(null);
     const imageInputRef = useRef<HTMLInputElement>(null);
+    const panelTimerRef = useRef<NodeJS.Timeout | null>(null);
 
     const [activePanel, setActivePanel] = useState<ActivePanel>('none');
     const [isExporting, setIsExporting] = useState(false);
@@ -120,6 +125,28 @@ export default function Toolbar() {
         return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
     }, [setIsFullscreen]);
 
+    // Auto-close panel after 3 seconds of inactivity
+    const resetPanelTimer = useCallback(() => {
+        if (panelTimerRef.current) {
+            clearTimeout(panelTimerRef.current);
+        }
+        panelTimerRef.current = setTimeout(() => {
+            setActivePanel('none');
+        }, 3000);
+    }, []);
+
+    // Start timer when panel opens
+    useEffect(() => {
+        if (activePanel !== 'none') {
+            resetPanelTimer();
+        }
+        return () => {
+            if (panelTimerRef.current) {
+                clearTimeout(panelTimerRef.current);
+            }
+        };
+    }, [activePanel, resetPanelTimer]);
+
     // Toggle fullscreen
     const toggleFullscreen = useCallback(async () => {
         try {
@@ -133,114 +160,122 @@ export default function Toolbar() {
         }
     }, []);
 
-    // Handle PDF export
+    // Export handler
     const handleExport = useCallback(async () => {
         if (isExporting) return;
-
         setIsExporting(true);
+
         try {
             await exportToPdf(strokes, images, {
-                projectName,
-                background: canvasBackground,
-                pattern: canvasPattern,
                 width: window.innerWidth,
                 pageHeight: pageHeight || window.innerHeight,
                 pageCount,
+                background: canvasBackground,
+                pattern: canvasPattern,
+                projectName: projectName || 'Untitled Universe',
             });
-        } catch (error) {
-            console.error('Export failed:', error);
-            alert('Failed to export PDF. Please try again.');
+        } catch (err) {
+            console.error('Export error:', err);
         } finally {
             setIsExporting(false);
         }
-    }, [strokes, images, projectName, canvasBackground, canvasPattern, pageHeight, pageCount, isExporting]);
+    }, [isExporting, strokes, images, pageHeight, pageCount, canvasBackground, canvasPattern, projectName]);
 
-    // Handle image upload with smart scaling
+    // Image upload handler
     const handleImageUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
-        if (!file || !file.type.startsWith('image/')) return;
+        if (!file) return;
 
-        const url = URL.createObjectURL(file);
-        const img = new Image();
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const dataUrl = event.target?.result as string;
+            if (!dataUrl) return;
 
-        img.onload = () => {
-            const { width, height, x, y } = calculateSmartScale(
-                img.naturalWidth,
-                img.naturalHeight,
-                window.innerWidth,
-                window.innerHeight
-            );
+            const img = new Image();
 
-            const canvasImage: CanvasImage = {
-                id: generateId(),
-                url,
-                x,
-                y,
-                width,
-                height,
-                naturalWidth: img.naturalWidth,
-                naturalHeight: img.naturalHeight,
+            img.onload = () => {
+                const { width, height, x, y } = calculateSmartScale(
+                    img.naturalWidth,
+                    img.naturalHeight,
+                    window.innerWidth,
+                    window.innerHeight
+                );
+
+                const canvasImage: CanvasImage = {
+                    id: generateId(),
+                    url: dataUrl,
+                    x,
+                    y,
+                    width,
+                    height,
+                    naturalWidth: img.naturalWidth,
+                    naturalHeight: img.naturalHeight,
+                };
+
+                addImage(canvasImage);
             };
 
-            addImage(canvasImage);
+            img.src = dataUrl;
         };
 
-        img.src = url;
+        reader.readAsDataURL(file);
         e.target.value = '';
     }, [addImage]);
 
-    // Handle Pen icon click
+    // Tool handlers
     const handlePenClick = () => {
-        if (!isPen) {
+        if (isPen) {
+            setActivePanel(activePanel === 'pen' ? 'none' : 'pen');
+        } else {
             setTool('pen');
             setActivePanel('pen');
-        } else {
-            setActivePanel(activePanel === 'pen' ? 'none' : 'pen');
         }
     };
 
-    // Handle Eraser icon click
     const handleEraserClick = () => {
-        if (!isEraser) {
+        if (isEraser) {
+            setActivePanel(activePanel === 'eraser' ? 'none' : 'eraser');
+        } else {
             setTool('eraser');
             setActivePanel('eraser');
-        } else {
-            setActivePanel(activePanel === 'eraser' ? 'none' : 'eraser');
         }
     };
 
-    // Handle Select icon click
     const handleSelectClick = () => {
         setTool('select');
         setActivePanel('none');
     };
 
-    // Handle Background icon click
     const handleBgClick = () => {
         setActivePanel(activePanel === 'bg' ? 'none' : 'bg');
     };
 
-    // Handle pattern selection with auto-close
+    const handleZoomClick = () => {
+        setActivePanel(activePanel === 'zoom' ? 'none' : 'zoom');
+    };
+
     const handlePatternSelect = (pattern: Pattern) => {
         setCanvasPattern(pattern);
         setActivePanel('none');
     };
 
-    // Handle Zoom icon click
-    const handleZoomClick = () => {
-        setActivePanel(activePanel === 'zoom' ? 'none' : 'zoom');
+    // Panel interaction keeps it open
+    const handlePanelInteraction = () => {
+        resetPanelTimer();
     };
 
-    // Render floating panel
+    // Render floating panel (opens UPWARD from dock)
     const renderPanel = () => {
         if (activePanel === 'none') return null;
 
         return (
-            <div className="absolute right-full mr-3 top-0
-        p-4 bg-black/50 backdrop-blur-xl border border-white/20 rounded-2xl shadow-2xl min-w-[170px]
-        animate-in slide-in-from-right-2 duration-150"
+            <div
+                className="absolute bottom-full mb-4 left-1/2 -translate-x-1/2
+                    p-4 bg-black/60 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl min-w-[180px]"
+                onPointerMove={handlePanelInteraction}
+                onPointerDown={handlePanelInteraction}
             >
-                {/* Pen Panel */}
+                {/* Pen Settings Panel */}
                 {activePanel === 'pen' && (
                     <>
                         <div className="flex items-center justify-between mb-3">
@@ -253,58 +288,45 @@ export default function Toolbar() {
                             </button>
                         </div>
 
+                        {/* Color Picker */}
                         <div className="flex items-center gap-3 mb-4">
-                            <span className="text-xs text-white/40">Color</span>
                             <button
                                 onClick={() => penColorRef.current?.click()}
-                                className="w-8 h-8 rounded-lg border-2 border-white/30 
-                  hover:border-white/50 transition-all hover:scale-105 shadow-lg"
+                                className="w-10 h-10 rounded-xl border-2 border-white/30 
+                                    hover:border-white/50 transition-all hover:scale-110 shadow-lg"
                                 style={{ backgroundColor: penColor }}
+                                title="Pen Color"
                             />
                             <input
                                 ref={penColorRef}
                                 type="color"
                                 value={penColor}
                                 onChange={(e) => setPenColor(e.target.value)}
-                                className="absolute opacity-0 w-0 h-0"
+                                className="sr-only"
                             />
+                            <span className="text-xs text-white/50 font-mono uppercase">{penColor}</span>
                         </div>
 
-                        <div>
-                            <div className="flex items-center justify-between mb-2">
-                                <span className="text-xs text-white/40">Size</span>
-                                <span className="text-xs text-white/60 font-mono">{penWidth}px</span>
+                        {/* Size Slider */}
+                        <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                                <span className="text-xs text-white/50">Size</span>
+                                <span className="text-xs text-white/70 font-mono">{penWidth}px</span>
                             </div>
                             <input
                                 type="range"
-                                min="1"
-                                max="50"
+                                min={1}
+                                max={50}
                                 value={penWidth}
                                 onChange={(e) => setPenWidth(parseInt(e.target.value))}
-                                className="w-full h-2 appearance-none bg-white/20 rounded-full cursor-pointer
-                  [&::-webkit-slider-thumb]:appearance-none
-                  [&::-webkit-slider-thumb]:w-4
-                  [&::-webkit-slider-thumb]:h-4
-                  [&::-webkit-slider-thumb]:bg-white
-                  [&::-webkit-slider-thumb]:rounded-full
-                  [&::-webkit-slider-thumb]:cursor-pointer
-                  [&::-webkit-slider-thumb]:shadow-lg"
+                                className="w-full h-2 rounded-full appearance-none cursor-pointer
+                                    bg-white/20 accent-white"
                             />
-                            <div className="flex justify-center mt-3">
-                                <div
-                                    className="rounded-full transition-all"
-                                    style={{
-                                        width: Math.min(penWidth, 32),
-                                        height: Math.min(penWidth, 32),
-                                        backgroundColor: penColor,
-                                    }}
-                                />
-                            </div>
                         </div>
                     </>
                 )}
 
-                {/* Eraser Panel */}
+                {/* Eraser Settings Panel */}
                 {activePanel === 'eraser' && (
                     <>
                         <div className="flex items-center justify-between mb-3">
@@ -317,40 +339,25 @@ export default function Toolbar() {
                             </button>
                         </div>
 
-                        <div>
-                            <div className="flex items-center justify-between mb-2">
-                                <span className="text-xs text-white/40">Size</span>
-                                <span className="text-xs text-white/60 font-mono">{eraserWidth}px</span>
+                        <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                                <span className="text-xs text-white/50">Size</span>
+                                <span className="text-xs text-white/70 font-mono">{eraserWidth}px</span>
                             </div>
                             <input
                                 type="range"
-                                min="5"
-                                max="100"
+                                min={5}
+                                max={100}
                                 value={eraserWidth}
                                 onChange={(e) => setEraserWidth(parseInt(e.target.value))}
-                                className="w-full h-2 appearance-none bg-white/20 rounded-full cursor-pointer
-                  [&::-webkit-slider-thumb]:appearance-none
-                  [&::-webkit-slider-thumb]:w-4
-                  [&::-webkit-slider-thumb]:h-4
-                  [&::-webkit-slider-thumb]:bg-white
-                  [&::-webkit-slider-thumb]:rounded-full
-                  [&::-webkit-slider-thumb]:cursor-pointer
-                  [&::-webkit-slider-thumb]:shadow-lg"
+                                className="w-full h-2 rounded-full appearance-none cursor-pointer
+                                    bg-white/20 accent-white"
                             />
-                            <div className="flex justify-center mt-3">
-                                <div
-                                    className="rounded-full border-2 border-white/40 bg-white/20 transition-all"
-                                    style={{
-                                        width: Math.min(eraserWidth, 48),
-                                        height: Math.min(eraserWidth, 48),
-                                    }}
-                                />
-                            </div>
                         </div>
                     </>
                 )}
 
-                {/* Background Panel */}
+                {/* Background Settings Panel */}
                 {activePanel === 'bg' && (
                     <>
                         <div className="flex items-center justify-between mb-3">
@@ -363,25 +370,28 @@ export default function Toolbar() {
                             </button>
                         </div>
 
+                        {/* Background Color */}
                         <div className="flex items-center gap-3 mb-4">
-                            <span className="text-xs text-white/40">Color</span>
                             <button
                                 onClick={() => bgColorRef.current?.click()}
-                                className="w-10 h-10 rounded-lg border-2 border-white/30 
-                  hover:border-white/50 transition-all hover:scale-105 shadow-lg"
+                                className="w-10 h-10 rounded-xl border-2 border-white/30 
+                                    hover:border-white/50 transition-all hover:scale-110 shadow-lg"
                                 style={{ backgroundColor: canvasBackground }}
+                                title="Paper Color"
                             />
                             <input
                                 ref={bgColorRef}
                                 type="color"
                                 value={canvasBackground}
                                 onChange={(e) => setCanvasBackground(e.target.value)}
-                                className="absolute opacity-0 w-0 h-0"
+                                className="sr-only"
                             />
+                            <span className="text-xs text-white/50 font-mono uppercase">{canvasBackground}</span>
                         </div>
 
-                        <div>
-                            <span className="text-xs text-white/40 block mb-2">Pattern</span>
+                        {/* Pattern Selector */}
+                        <div className="space-y-2">
+                            <span className="text-xs text-white/50">Pattern</span>
                             <div className="grid grid-cols-4 gap-2">
                                 {patterns.map((p) => (
                                     <button
@@ -417,7 +427,6 @@ export default function Toolbar() {
                         </div>
 
                         <div className="flex items-center gap-2">
-                            {/* Zoom Out */}
                             <button
                                 onClick={zoomOut}
                                 disabled={zoom <= 0.1}
@@ -430,7 +439,6 @@ export default function Toolbar() {
                                 <Minus className="w-4 h-4 text-white/60" />
                             </button>
 
-                            {/* Zoom Display - Click to reset */}
                             <button
                                 onClick={resetZoom}
                                 className="px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 
@@ -440,7 +448,6 @@ export default function Toolbar() {
                                 {Math.round(zoom * 100)}%
                             </button>
 
-                            {/* Zoom In */}
                             <button
                                 onClick={zoomIn}
                                 disabled={zoom >= 5.0}
@@ -459,33 +466,23 @@ export default function Toolbar() {
         );
     };
 
+    // Vertical separator
+    const Separator = () => (
+        <div className="w-px h-6 bg-white/20 mx-1" />
+    );
+
     return (
-        <div className={`fixed right-4 top-1/2 -translate-y-1/2 z-50 transition-opacity duration-500 ${isFullscreen
-            ? 'opacity-0 hover:opacity-100 delay-700'
-            : 'opacity-100'
-            }`}>
-            {/* Floating Panel */}
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
+            {/* Floating Panel (opens UPWARD) */}
             <div className="relative">
                 {renderPanel()}
             </div>
 
-            {/* Main Tool Strip */}
-            <div className="flex flex-col items-center gap-2 p-3
-        bg-black/40 backdrop-blur-xl border border-white/20 rounded-2xl shadow-2xl"
+            {/* Main Dock */}
+            <div className="flex items-center gap-1 px-4 py-3
+                bg-black/60 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl"
             >
-                {/* Select Tool */}
-                <button
-                    onClick={handleSelectClick}
-                    className={`relative p-3 rounded-xl transition-all hover:scale-110 ${isSelect
-                        ? 'bg-white/25 ring-2 ring-white/50'
-                        : 'bg-white/5 hover:bg-white/10'
-                        }`}
-                    title="Select Tool (V)"
-                >
-                    <Hand className={`w-5 h-5 ${isSelect ? 'text-white' : 'text-white/60'}`} />
-                </button>
-
-                {/* Pen Tool */}
+                {/* Group 1: Tools */}
                 <button
                     onClick={handlePenClick}
                     className={`relative p-3 rounded-xl transition-all hover:scale-110 ${isPen
@@ -494,13 +491,9 @@ export default function Toolbar() {
                         }`}
                     title="Pen Tool (P)"
                 >
-                    <Pencil className={`w-5 h-5 ${isPen ? 'text-white' : 'text-white/60'}`} />
-                    {activePanel === 'pen' && (
-                        <span className="absolute -left-1 top-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-white rounded-full" />
-                    )}
+                    <Pencil className={`w-6 h-6 ${isPen ? 'text-white' : 'text-white/60'}`} />
                 </button>
 
-                {/* Eraser Tool */}
                 <button
                     onClick={handleEraserClick}
                     className={`relative p-3 rounded-xl transition-all hover:scale-110 ${isEraser
@@ -509,33 +502,23 @@ export default function Toolbar() {
                         }`}
                     title="Eraser Tool (E)"
                 >
-                    <Eraser className={`w-5 h-5 ${isEraser ? 'text-white' : 'text-white/60'}`} />
-                    {activePanel === 'eraser' && (
-                        <span className="absolute -left-1 top-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-white rounded-full" />
-                    )}
+                    <Eraser className={`w-6 h-6 ${isEraser ? 'text-white' : 'text-white/60'}`} />
                 </button>
 
-                {/* Divider */}
-                <div className="w-8 h-px bg-white/20 my-1" />
-
-                {/* Image Upload */}
                 <button
-                    onClick={() => imageInputRef.current?.click()}
-                    className="p-3 rounded-xl bg-white/5 hover:bg-white/15 
-            transition-all hover:scale-110"
-                    title="Add Image"
+                    onClick={handleSelectClick}
+                    className={`relative p-3 rounded-xl transition-all hover:scale-110 ${isSelect
+                        ? 'bg-white/25 ring-2 ring-white/50'
+                        : 'bg-white/5 hover:bg-white/10'
+                        }`}
+                    title="Select Tool (V)"
                 >
-                    <ImageIcon className="w-5 h-5 text-white/60" />
+                    <Hand className={`w-6 h-6 ${isSelect ? 'text-white' : 'text-white/60'}`} />
                 </button>
-                <input
-                    ref={imageInputRef}
-                    type="file"
-                    accept="image/*"
-                    onChange={handleImageUpload}
-                    className="hidden"
-                />
 
-                {/* Undo Button */}
+                <Separator />
+
+                {/* Group 2: Actions */}
                 <button
                     onClick={undo}
                     disabled={!canUndoAction}
@@ -545,10 +528,9 @@ export default function Toolbar() {
                         }`}
                     title="Undo (Ctrl+Z)"
                 >
-                    <Undo2 className="w-5 h-5 text-white/60" />
+                    <Undo2 className="w-6 h-6 text-white/60" />
                 </button>
 
-                {/* Redo Button */}
                 <button
                     onClick={redo}
                     disabled={!canRedoAction}
@@ -558,13 +540,49 @@ export default function Toolbar() {
                         }`}
                     title="Redo (Ctrl+Y)"
                 >
-                    <Redo2 className="w-5 h-5 text-white/60" />
+                    <Redo2 className="w-6 h-6 text-white/60" />
                 </button>
 
-                {/* Divider */}
-                <div className="w-8 h-px bg-white/20 my-1" />
+                <button
+                    onClick={clearCanvas}
+                    className="p-3 rounded-xl bg-white/5 hover:bg-red-500/30 
+                        transition-all hover:scale-110"
+                    title="Clear Canvas"
+                >
+                    <Trash2 className="w-6 h-6 text-white/60 hover:text-red-400" />
+                </button>
 
-                {/* Background Settings */}
+                <Separator />
+
+                {/* Group 3: Page & Image */}
+                <button
+                    onClick={addPage}
+                    className="p-3 rounded-xl bg-white/5 hover:bg-white/15 
+                        transition-all hover:scale-110"
+                    title={`Add Page (${pageCount} Pages)`}
+                >
+                    <FilePlus className="w-6 h-6 text-white/60" />
+                </button>
+
+                <button
+                    onClick={() => imageInputRef.current?.click()}
+                    className="p-3 rounded-xl bg-white/5 hover:bg-white/15 
+                        transition-all hover:scale-110"
+                    title="Add Image"
+                >
+                    <ImageIcon className="w-6 h-6 text-white/60" />
+                </button>
+                <input
+                    ref={imageInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageUpload}
+                    className="hidden"
+                />
+
+                <Separator />
+
+                {/* Group 4: Meta */}
                 <button
                     onClick={handleBgClick}
                     className={`relative p-3 rounded-xl transition-all hover:scale-110 ${activePanel === 'bg'
@@ -573,13 +591,9 @@ export default function Toolbar() {
                         }`}
                     title="Paper Settings"
                 >
-                    <Paintbrush className={`w-5 h-5 ${activePanel === 'bg' ? 'text-white' : 'text-white/60'}`} />
-                    {activePanel === 'bg' && (
-                        <span className="absolute -left-1 top-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-white rounded-full" />
-                    )}
+                    <Paintbrush className={`w-6 h-6 ${activePanel === 'bg' ? 'text-white' : 'text-white/60'}`} />
                 </button>
 
-                {/* Zoom Controls */}
                 <button
                     onClick={handleZoomClick}
                     className={`relative p-3 rounded-xl transition-all hover:scale-110 ${activePanel === 'zoom'
@@ -588,16 +602,21 @@ export default function Toolbar() {
                         }`}
                     title={`Zoom (${Math.round(zoom * 100)}%)`}
                 >
-                    <ZoomIn className={`w-5 h-5 ${activePanel === 'zoom' ? 'text-white' : 'text-white/60'}`} />
-                    {activePanel === 'zoom' && (
-                        <span className="absolute -left-1 top-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-white rounded-full" />
-                    )}
+                    <ZoomIn className={`w-6 h-6 ${activePanel === 'zoom' ? 'text-white' : 'text-white/60'}`} />
                 </button>
 
-                {/* Divider */}
-                <div className="w-8 h-px bg-white/20 my-1" />
+                <button
+                    onClick={toggleFullscreen}
+                    className="p-3 rounded-xl bg-white/5 hover:bg-white/15 
+                        transition-all hover:scale-110"
+                    title={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
+                >
+                    {isFullscreen
+                        ? <Minimize className="w-6 h-6 text-white/60" />
+                        : <Maximize className="w-6 h-6 text-white/60" />
+                    }
+                </button>
 
-                {/* Export PDF */}
                 <button
                     onClick={handleExport}
                     disabled={isExporting}
@@ -607,35 +626,7 @@ export default function Toolbar() {
                         }`}
                     title="Export PDF"
                 >
-                    <Download className={`w-5 h-5 ${isExporting ? 'animate-pulse' : ''} text-white/60`} />
-                </button>
-
-                {/* Fullscreen Toggle */}
-                <button
-                    onClick={toggleFullscreen}
-                    className="p-3 rounded-xl bg-white/5 hover:bg-white/15 
-            transition-all hover:scale-110"
-                    title={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
-                >
-                    {isFullscreen ? (
-                        <Minimize className="w-5 h-5 text-white/60" />
-                    ) : (
-                        <Maximize className="w-5 h-5 text-white/60" />
-                    )}
-                </button>
-
-                {/* Clear Canvas */}
-                <button
-                    onClick={() => {
-                        if (confirm('Clear the entire canvas?')) {
-                            clearCanvas();
-                        }
-                    }}
-                    className="p-3 rounded-xl bg-white/5 hover:bg-red-500/30 
-            transition-all hover:scale-110 group"
-                    title="Clear Canvas"
-                >
-                    <Trash2 className="w-5 h-5 text-white/60 group-hover:text-red-400 transition-colors" />
+                    <Download className={`w-6 h-6 ${isExporting ? 'text-white/40 animate-pulse' : 'text-white/60 hover:text-green-400'}`} />
                 </button>
             </div>
         </div>
