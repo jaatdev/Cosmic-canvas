@@ -1,23 +1,29 @@
 import { create } from 'zustand';
-import { Point, Stroke, StrokeConfig, Tool, Pattern } from '@/types';
+import { Point, Stroke, Tool, Pattern } from '@/types';
 
 // Re-export types for convenience
-export type { Point, Stroke, StrokeConfig, Tool, Pattern };
+export type { Point, Stroke, Tool, Pattern };
 
 // Store state
 interface CanvasState {
     strokes: Stroke[];
-    currentConfig: StrokeConfig;
     currentTool: Tool;
+
+    // Separate widths for pen and eraser
+    penColor: string;
+    penWidth: number;
+    eraserWidth: number;
+
+    // Background
     canvasBackground: string;
     canvasPattern: Pattern;
 
     // Actions
     addStroke: (stroke: Omit<Stroke, 'isEraser'>) => void;
-    setColor: (color: string) => void;
-    setSize: (size: number) => void;
     setTool: (tool: Tool) => void;
-    setStrokeConfig: (config: Partial<StrokeConfig>) => void;
+    setPenColor: (color: string) => void;
+    setPenWidth: (width: number) => void;
+    setEraserWidth: (width: number) => void;
     setCanvasBackground: (color: string) => void;
     setCanvasPattern: (pattern: Pattern) => void;
     clearCanvas: () => void;
@@ -26,48 +32,44 @@ interface CanvasState {
 export const useStore = create<CanvasState>((set, get) => ({
     // Initial state
     strokes: [],
-    currentConfig: {
-        color: '#000000',
-        size: 8,
-    },
     currentTool: 'pen',
-    canvasBackground: '#ffffff',  // Default white paper
+
+    // Separate widths
+    penColor: '#000000',
+    penWidth: 8,
+    eraserWidth: 20,
+
+    // Background
+    canvasBackground: '#ffffff',
     canvasPattern: 'none',
 
     // Add completed stroke to history
-    addStroke: (stroke) =>
-        set((state) => ({
-            strokes: [...state.strokes, {
+    addStroke: (stroke) => {
+        const state = get();
+        const isEraser = state.currentTool === 'eraser';
+        set((s) => ({
+            strokes: [...s.strokes, {
                 ...stroke,
-                isEraser: get().currentTool === 'eraser'
+                // Use correct width based on tool
+                size: isEraser ? state.eraserWidth : state.penWidth,
+                color: isEraser ? '#000000' : state.penColor,
+                isEraser,
             }],
-        })),
-
-    // Set stroke color
-    setColor: (color) =>
-        set((state) => ({
-            currentConfig: { ...state.currentConfig, color },
-        })),
-
-    // Set stroke size
-    setSize: (size) =>
-        set((state) => ({
-            currentConfig: { ...state.currentConfig, size: Math.max(1, Math.min(50, size)) },
-        })),
+        }));
+    },
 
     // Set current tool
     setTool: (tool) => set({ currentTool: tool }),
 
-    // Update stroke configuration
-    setStrokeConfig: (config) =>
-        set((state) => ({
-            currentConfig: { ...state.currentConfig, ...config },
-        })),
+    // Pen settings
+    setPenColor: (color) => set({ penColor: color }),
+    setPenWidth: (width) => set({ penWidth: Math.max(1, Math.min(50, width)) }),
 
-    // Set canvas background color
+    // Eraser settings
+    setEraserWidth: (width) => set({ eraserWidth: Math.max(5, Math.min(100, width)) }),
+
+    // Background settings
     setCanvasBackground: (color) => set({ canvasBackground: color }),
-
-    // Set canvas pattern
     setCanvasPattern: (pattern) => set({ canvasPattern: pattern }),
 
     // Clear all strokes

@@ -38,12 +38,20 @@ export default function Stage() {
     const activeLayerRef = useRef<HTMLCanvasElement>(null);
     const { width, height, pixelRatio } = useWindowDimensions();
 
-    // Zustand store
-    const { strokes, currentConfig, currentTool, addStroke } = useStore();
+    // Zustand store with separate pen/eraser widths
+    const { strokes, currentTool, penColor, penWidth, eraserWidth, addStroke } = useStore();
 
     // Local drawing state
     const [isDrawing, setIsDrawing] = useState(false);
     const currentPointsRef = useRef<Point[] | null>(null);
+
+    // Get current stroke settings based on tool
+    const getCurrentStrokeSettings = useCallback(() => {
+        if (currentTool === 'eraser') {
+            return { color: '#000000', size: eraserWidth, isEraser: true };
+        }
+        return { color: penColor, size: penWidth, isEraser: false };
+    }, [currentTool, penColor, penWidth, eraserWidth]);
 
     // Draw a single stroke to a canvas context
     const drawStroke = useCallback((
@@ -52,7 +60,6 @@ export default function Stage() {
     ) => {
         if (stroke.points.length < 2) return;
 
-        // Set composite operation based on eraser
         if (stroke.isEraser) {
             ctx.globalCompositeOperation = 'destination-out';
         } else {
@@ -68,39 +75,30 @@ export default function Stage() {
         ctx.fill(path);
     }, []);
 
-    // Setup canvas with High-DPI scaling (transparent background)
+    // Setup canvas with High-DPI scaling
     const setupCanvas = useCallback((canvas: HTMLCanvasElement | null) => {
         if (!canvas || width === 0 || height === 0) return null;
 
         const ctx = canvas.getContext('2d');
         if (!ctx) return null;
 
-        // Set internal buffer size
         canvas.width = width * pixelRatio;
         canvas.height = height * pixelRatio;
 
-        // Scale context
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.scale(pixelRatio, pixelRatio);
 
         return ctx;
     }, [width, height, pixelRatio]);
 
-    // Render static layer (stroke history) - TRANSPARENT background, only strokes
+    // Render static layer (stroke history)
     const renderStaticLayer = useCallback(() => {
         const ctx = setupCanvas(staticLayerRef.current);
         if (!ctx) return;
 
-        // Clear to transparent (no background fill - BackgroundLayer handles that)
         ctx.clearRect(0, 0, width, height);
-
-        // Draw all completed strokes
         strokes.forEach((stroke) => drawStroke(ctx, stroke));
-
-        // Reset composite operation
         ctx.globalCompositeOperation = 'source-over';
-
-        console.log(`Static layer rendered: ${strokes.length} strokes`);
     }, [width, height, strokes, setupCanvas, drawStroke]);
 
     // Render active layer (current stroke only)
@@ -111,17 +109,15 @@ export default function Stage() {
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
 
-        // Clear active layer (transparent)
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.scale(pixelRatio, pixelRatio);
         ctx.clearRect(0, 0, width, height);
 
-        // Draw current stroke if exists
         const currentPoints = currentPointsRef.current;
         if (currentPoints && currentPoints.length >= 2) {
-            const isEraser = currentTool === 'eraser';
+            const settings = getCurrentStrokeSettings();
 
-            if (isEraser) {
+            if (settings.isEraser) {
                 ctx.globalCompositeOperation = 'destination-out';
             } else {
                 ctx.globalCompositeOperation = 'source-over';
@@ -129,20 +125,17 @@ export default function Stage() {
 
             drawStroke(ctx, {
                 points: currentPoints,
-                color: currentConfig.color,
-                size: currentConfig.size,
-                isEraser,
+                ...settings,
             });
 
             ctx.globalCompositeOperation = 'source-over';
         }
-    }, [width, height, pixelRatio, currentConfig, currentTool, drawStroke]);
+    }, [width, height, pixelRatio, getCurrentStrokeSettings, drawStroke]);
 
     // Setup canvases on mount/resize
     useEffect(() => {
         setupCanvas(staticLayerRef.current);
         setupCanvas(activeLayerRef.current);
-        console.log(`Canvas Setup: ${width}x${height} @ ${pixelRatio}x DPI`);
     }, [width, height, pixelRatio, setupCanvas]);
 
     // Re-render static layer when stroke history changes
@@ -152,10 +145,7 @@ export default function Stage() {
 
     // Pointer Down - Start drawing
     const handlePointerDown = useCallback((e: React.PointerEvent) => {
-        if (e.pointerType === 'touch') {
-            console.log('Touch rejected (palm rejection)');
-            return;
-        }
+        if (e.pointerType === 'touch') return;
 
         const container = e.currentTarget as HTMLElement;
         const rect = container.getBoundingClientRect();
@@ -166,9 +156,7 @@ export default function Stage() {
 
         currentPointsRef.current = [{ x, y, pressure: e.pressure || 0.5 }];
         setIsDrawing(true);
-
-        console.log(`Start ${currentTool}: (${x.toFixed(1)}, ${y.toFixed(1)})`);
-    }, [currentTool]);
+    }, []);
 
     // Pointer Move - Continue drawing
     const handlePointerMove = useCallback((e: React.PointerEvent) => {
@@ -194,12 +182,12 @@ export default function Stage() {
 
         const points = currentPointsRef.current;
         if (points && points.length >= 2) {
+            const settings = getCurrentStrokeSettings();
             addStroke({
                 points,
-                color: currentConfig.color,
-                size: currentConfig.size,
+                color: settings.color,
+                size: settings.size,
             });
-            console.log(`${currentTool} stroke saved: ${points.length} points`);
         }
 
         currentPointsRef.current = null;
@@ -213,23 +201,24 @@ export default function Stage() {
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
             }
         }
-    }, [addStroke, currentConfig, currentTool]);
+    }, [addStroke, getCurrentStrokeSettings]);
 
     // Pointer Leave
     const handlePointerLeave = useCallback((e: React.PointerEvent) => {
         if (isDrawing && currentPointsRef.current) {
             const points = currentPointsRef.current;
             if (points.length >= 2) {
+                const settings = getCurrentStrokeSettings();
                 addStroke({
                     points,
-                    color: currentConfig.color,
-                    size: currentConfig.size,
+                    color: settings.color,
+                    size: settings.size,
                 });
             }
             currentPointsRef.current = null;
             setIsDrawing(false);
         }
-    }, [isDrawing, addStroke, currentConfig]);
+    }, [isDrawing, addStroke, getCurrentStrokeSettings]);
 
     const canvasStyle: React.CSSProperties = {
         position: 'absolute',
@@ -253,16 +242,13 @@ export default function Stage() {
             onPointerUp={handlePointerUp}
             onPointerLeave={handlePointerLeave}
         >
-            {/* Background Layer - Color and Pattern (z-0) */}
             <BackgroundLayer />
 
-            {/* Static Layer - Stroke History (z-10) */}
             <canvas
                 ref={staticLayerRef}
                 style={{ ...canvasStyle, zIndex: 10, pointerEvents: 'none' }}
             />
 
-            {/* Active Layer - Current Stroke (z-20) */}
             <canvas
                 ref={activeLayerRef}
                 style={{ ...canvasStyle, zIndex: 20, pointerEvents: 'none' }}
