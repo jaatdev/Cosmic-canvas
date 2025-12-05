@@ -1,14 +1,16 @@
 import { create } from 'zustand';
-import { Point, Stroke, StrokeConfig, Tool } from '@/types';
+import { Point, Stroke, StrokeConfig, Tool, Pattern } from '@/types';
 
 // Re-export types for convenience
-export type { Point, Stroke, StrokeConfig, Tool };
+export type { Point, Stroke, StrokeConfig, Tool, Pattern };
 
 // Store state
 interface CanvasState {
     strokes: Stroke[];
     currentConfig: StrokeConfig;
     currentTool: Tool;
+    canvasBackground: string;
+    canvasPattern: Pattern;
 
     // Actions
     addStroke: (stroke: Omit<Stroke, 'isEraser'>) => void;
@@ -16,6 +18,8 @@ interface CanvasState {
     setSize: (size: number) => void;
     setTool: (tool: Tool) => void;
     setStrokeConfig: (config: Partial<StrokeConfig>) => void;
+    setCanvasBackground: (color: string) => void;
+    setCanvasPattern: (pattern: Pattern) => void;
     clearCanvas: () => void;
 }
 
@@ -23,12 +27,14 @@ export const useStore = create<CanvasState>((set, get) => ({
     // Initial state
     strokes: [],
     currentConfig: {
-        color: '#ffffff',
+        color: '#000000',
         size: 8,
     },
     currentTool: 'pen',
+    canvasBackground: '#ffffff',  // Default white paper
+    canvasPattern: 'none',
 
-    // Add completed stroke to history (includes isEraser based on current tool)
+    // Add completed stroke to history
     addStroke: (stroke) =>
         set((state) => ({
             strokes: [...state.strokes, {
@@ -57,6 +63,12 @@ export const useStore = create<CanvasState>((set, get) => ({
         set((state) => ({
             currentConfig: { ...state.currentConfig, ...config },
         })),
+
+    // Set canvas background color
+    setCanvasBackground: (color) => set({ canvasBackground: color }),
+
+    // Set canvas pattern
+    setCanvasPattern: (pattern) => set({ canvasPattern: pattern }),
 
     // Clear all strokes
     clearCanvas: () => set({ strokes: [] }),

@@ -6,6 +6,7 @@ import getStroke from 'perfect-freehand';
 import { getSvgPathFromStroke } from '@/utils/ink';
 import { useStore } from '@/store/useStore';
 import { Point, Stroke } from '@/types';
+import BackgroundLayer from './BackgroundLayer';
 
 // perfect-freehand options for gel pen feel
 const getStrokeOptions = (size: number) => ({
@@ -25,13 +26,12 @@ const getStrokeOptions = (size: number) => ({
 });
 
 /**
- * Stage Component - Multi-Layer Canvas with Eraser Support
+ * Stage Component - Multi-Layer Canvas with Background Support
  * 
- * Two-canvas architecture:
+ * Three-layer architecture:
+ * - Background Layer (z-0): Customizable color and pattern
  * - Static Layer (z-10): Renders completed stroke history
  * - Active Layer (z-20): Renders only the current stroke being drawn
- * 
- * Eraser uses globalCompositeOperation = 'destination-out'
  */
 export default function Stage() {
     const staticLayerRef = useRef<HTMLCanvasElement>(null);
@@ -68,7 +68,7 @@ export default function Stage() {
         ctx.fill(path);
     }, []);
 
-    // Setup both canvases with High-DPI scaling
+    // Setup canvas with High-DPI scaling (transparent background)
     const setupCanvas = useCallback((canvas: HTMLCanvasElement | null) => {
         if (!canvas || width === 0 || height === 0) return null;
 
@@ -86,15 +86,13 @@ export default function Stage() {
         return ctx;
     }, [width, height, pixelRatio]);
 
-    // Render static layer (stroke history) - only when strokes change
+    // Render static layer (stroke history) - TRANSPARENT background, only strokes
     const renderStaticLayer = useCallback(() => {
         const ctx = setupCanvas(staticLayerRef.current);
         if (!ctx) return;
 
-        // Clear and draw background
-        ctx.globalCompositeOperation = 'source-over';
-        ctx.fillStyle = '#1e1e1e';
-        ctx.fillRect(0, 0, width, height);
+        // Clear to transparent (no background fill - BackgroundLayer handles that)
+        ctx.clearRect(0, 0, width, height);
 
         // Draw all completed strokes
         strokes.forEach((stroke) => drawStroke(ctx, stroke));
@@ -105,7 +103,7 @@ export default function Stage() {
         console.log(`Static layer rendered: ${strokes.length} strokes`);
     }, [width, height, strokes, setupCanvas, drawStroke]);
 
-    // Render active layer (current stroke only) - called on every frame while drawing
+    // Render active layer (current stroke only)
     const renderActiveLayer = useCallback(() => {
         const canvas = activeLayerRef.current;
         if (!canvas || width === 0 || height === 0) return;
@@ -123,7 +121,6 @@ export default function Stage() {
         if (currentPoints && currentPoints.length >= 2) {
             const isEraser = currentTool === 'eraser';
 
-            // Set composite operation
             if (isEraser) {
                 ctx.globalCompositeOperation = 'destination-out';
             } else {
@@ -137,7 +134,6 @@ export default function Stage() {
                 isEraser,
             });
 
-            // Reset
             ctx.globalCompositeOperation = 'source-over';
         }
     }, [width, height, pixelRatio, currentConfig, currentTool, drawStroke]);
@@ -156,7 +152,6 @@ export default function Stage() {
 
     // Pointer Down - Start drawing
     const handlePointerDown = useCallback((e: React.PointerEvent) => {
-        // PALM REJECTION
         if (e.pointerType === 'touch') {
             console.log('Touch rejected (palm rejection)');
             return;
@@ -167,17 +162,15 @@ export default function Stage() {
         const x = e.clientX - rect.left;
         const y = e.clientY - rect.top;
 
-        // Capture pointer
         (e.target as HTMLElement).setPointerCapture(e.pointerId);
 
-        // Start new stroke
         currentPointsRef.current = [{ x, y, pressure: e.pressure || 0.5 }];
         setIsDrawing(true);
 
         console.log(`Start ${currentTool}: (${x.toFixed(1)}, ${y.toFixed(1)})`);
     }, [currentTool]);
 
-    // Pointer Move - Continue drawing (FAST LOOP - only active layer)
+    // Pointer Move - Continue drawing
     const handlePointerMove = useCallback((e: React.PointerEvent) => {
         if (!isDrawing) return;
         if (e.pointerType === 'touch') return;
@@ -189,7 +182,6 @@ export default function Stage() {
 
         if (currentPointsRef.current) {
             currentPointsRef.current.push({ x, y, pressure: e.pressure || 0.5 });
-            // Only render active layer - NOT the static layer
             renderActiveLayer();
         }
     }, [isDrawing, renderActiveLayer]);
@@ -202,7 +194,6 @@ export default function Stage() {
 
         const points = currentPointsRef.current;
         if (points && points.length >= 2) {
-            // Save stroke to history (isEraser is added by the store)
             addStroke({
                 points,
                 color: currentConfig.color,
@@ -211,11 +202,9 @@ export default function Stage() {
             console.log(`${currentTool} stroke saved: ${points.length} points`);
         }
 
-        // Clear current stroke IMMEDIATELY
         currentPointsRef.current = null;
         setIsDrawing(false);
 
-        // Clear active layer
         const canvas = activeLayerRef.current;
         if (canvas) {
             const ctx = canvas.getContext('2d');
@@ -226,7 +215,7 @@ export default function Stage() {
         }
     }, [addStroke, currentConfig, currentTool]);
 
-    // Pointer Leave - Save stroke if still drawing
+    // Pointer Leave
     const handlePointerLeave = useCallback((e: React.PointerEvent) => {
         if (isDrawing && currentPointsRef.current) {
             const points = currentPointsRef.current;
@@ -264,6 +253,9 @@ export default function Stage() {
             onPointerUp={handlePointerUp}
             onPointerLeave={handlePointerLeave}
         >
+            {/* Background Layer - Color and Pattern (z-0) */}
+            <BackgroundLayer />
+
             {/* Static Layer - Stroke History (z-10) */}
             <canvas
                 ref={staticLayerRef}
