@@ -11,7 +11,8 @@ import {
     Paintbrush,
     Maximize,
     Minimize,
-    ZoomIn,
+    Undo2,
+    Redo2,
     X
 } from 'lucide-react';
 import { useRef, useState, useEffect, useCallback } from 'react';
@@ -20,13 +21,7 @@ import { Pattern } from '@/types';
 type ActivePanel = 'none' | 'pen' | 'eraser' | 'bg';
 
 /**
- * Toolbar Component - The Toggleable Cockpit
- * 
- * All panels are toggleable by clicking the tool icon.
- * - Click Pen (when not pen) -> switch to pen AND open panel
- * - Click Pen (when pen) -> toggle panel open/close
- * - Same for Eraser
- * - Background panel auto-closes after selection
+ * Toolbar Component - The Toggleable Cockpit with Undo/Redo
  */
 export default function Toolbar() {
     const {
@@ -36,12 +31,16 @@ export default function Toolbar() {
         eraserWidth,
         canvasBackground,
         canvasPattern,
+        strokes,
+        redoStack,
         setTool,
         setPenColor,
         setPenWidth,
         setEraserWidth,
         setCanvasBackground,
         setCanvasPattern,
+        undo,
+        redo,
         clearCanvas
     } = useStore();
 
@@ -53,6 +52,8 @@ export default function Toolbar() {
 
     const isPen = currentTool === 'pen';
     const isEraser = currentTool === 'eraser';
+    const canUndoAction = strokes.length > 0;
+    const canRedoAction = redoStack.length > 0;
 
     const patterns: { id: Pattern; icon: React.ReactNode; label: string }[] = [
         { id: 'none', icon: <X className="w-4 h-4" />, label: 'None' },
@@ -86,11 +87,9 @@ export default function Toolbar() {
     // Handle Pen icon click
     const handlePenClick = () => {
         if (!isPen) {
-            // Switch to pen AND open panel
             setTool('pen');
             setActivePanel('pen');
         } else {
-            // Already pen, toggle panel
             setActivePanel(activePanel === 'pen' ? 'none' : 'pen');
         }
     };
@@ -98,11 +97,9 @@ export default function Toolbar() {
     // Handle Eraser icon click
     const handleEraserClick = () => {
         if (!isEraser) {
-            // Switch to eraser AND open panel
             setTool('eraser');
             setActivePanel('eraser');
         } else {
-            // Already eraser, toggle panel
             setActivePanel(activePanel === 'eraser' ? 'none' : 'eraser');
         }
     };
@@ -115,12 +112,7 @@ export default function Toolbar() {
     // Handle pattern selection with auto-close
     const handlePatternSelect = (pattern: Pattern) => {
         setCanvasPattern(pattern);
-        setActivePanel('none'); // Auto-close
-    };
-
-    // Handle background color change with auto-close
-    const handleBgColorChange = (color: string) => {
-        setCanvasBackground(color);
+        setActivePanel('none');
     };
 
     // Render floating panel
@@ -145,7 +137,6 @@ export default function Toolbar() {
                             </button>
                         </div>
 
-                        {/* Ink Color */}
                         <div className="flex items-center gap-3 mb-4">
                             <span className="text-xs text-white/40">Color</span>
                             <button
@@ -163,7 +154,6 @@ export default function Toolbar() {
                             />
                         </div>
 
-                        {/* Pen Size */}
                         <div>
                             <div className="flex items-center justify-between mb-2">
                                 <span className="text-xs text-white/40">Size</span>
@@ -184,7 +174,6 @@ export default function Toolbar() {
                   [&::-webkit-slider-thumb]:cursor-pointer
                   [&::-webkit-slider-thumb]:shadow-lg"
                             />
-                            {/* Size Preview */}
                             <div className="flex justify-center mt-3">
                                 <div
                                     className="rounded-full transition-all"
@@ -212,7 +201,6 @@ export default function Toolbar() {
                             </button>
                         </div>
 
-                        {/* Eraser Size */}
                         <div>
                             <div className="flex items-center justify-between mb-2">
                                 <span className="text-xs text-white/40">Size</span>
@@ -233,7 +221,6 @@ export default function Toolbar() {
                   [&::-webkit-slider-thumb]:cursor-pointer
                   [&::-webkit-slider-thumb]:shadow-lg"
                             />
-                            {/* Size Preview */}
                             <div className="flex justify-center mt-3">
                                 <div
                                     className="rounded-full border-2 border-white/40 bg-white/20 transition-all"
@@ -260,7 +247,6 @@ export default function Toolbar() {
                             </button>
                         </div>
 
-                        {/* Paper Color */}
                         <div className="flex items-center gap-3 mb-4">
                             <span className="text-xs text-white/40">Color</span>
                             <button
@@ -273,12 +259,11 @@ export default function Toolbar() {
                                 ref={bgColorRef}
                                 type="color"
                                 value={canvasBackground}
-                                onChange={(e) => handleBgColorChange(e.target.value)}
+                                onChange={(e) => setCanvasBackground(e.target.value)}
                                 className="absolute opacity-0 w-0 h-0"
                             />
                         </div>
 
-                        {/* Patterns */}
                         <div>
                             <span className="text-xs text-white/40 block mb-2">Pattern</span>
                             <div className="grid grid-cols-4 gap-2">
@@ -323,10 +308,9 @@ export default function Toolbar() {
                             ? 'bg-white/25 ring-2 ring-white/50'
                             : 'bg-white/5 hover:bg-white/10'
                         }`}
-                    title="Pen Tool"
+                    title="Pen Tool (P)"
                 >
                     <Pencil className={`w-5 h-5 ${isPen ? 'text-white' : 'text-white/60'}`} />
-                    {/* Active Panel Indicator */}
                     {activePanel === 'pen' && (
                         <span className="absolute -left-1 top-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-white rounded-full" />
                     )}
@@ -339,12 +323,41 @@ export default function Toolbar() {
                             ? 'bg-white/25 ring-2 ring-white/50'
                             : 'bg-white/5 hover:bg-white/10'
                         }`}
-                    title="Eraser Tool"
+                    title="Eraser Tool (E)"
                 >
                     <Eraser className={`w-5 h-5 ${isEraser ? 'text-white' : 'text-white/60'}`} />
                     {activePanel === 'eraser' && (
                         <span className="absolute -left-1 top-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-white rounded-full" />
                     )}
+                </button>
+
+                {/* Divider */}
+                <div className="w-8 h-px bg-white/20 my-1" />
+
+                {/* Undo Button */}
+                <button
+                    onClick={undo}
+                    disabled={!canUndoAction}
+                    className={`p-3 rounded-xl transition-all ${canUndoAction
+                            ? 'bg-white/5 hover:bg-white/15 hover:scale-110'
+                            : 'bg-white/5 opacity-30 cursor-not-allowed'
+                        }`}
+                    title="Undo (Ctrl+Z)"
+                >
+                    <Undo2 className="w-5 h-5 text-white/60" />
+                </button>
+
+                {/* Redo Button */}
+                <button
+                    onClick={redo}
+                    disabled={!canRedoAction}
+                    className={`p-3 rounded-xl transition-all ${canRedoAction
+                            ? 'bg-white/5 hover:bg-white/15 hover:scale-110'
+                            : 'bg-white/5 opacity-30 cursor-not-allowed'
+                        }`}
+                    title="Redo (Ctrl+Y)"
+                >
+                    <Redo2 className="w-5 h-5 text-white/60" />
                 </button>
 
                 {/* Divider */}
@@ -363,15 +376,6 @@ export default function Toolbar() {
                     {activePanel === 'bg' && (
                         <span className="absolute -left-1 top-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-white rounded-full" />
                     )}
-                </button>
-
-                {/* Zoom (Placeholder) */}
-                <button
-                    disabled
-                    className="p-3 rounded-xl bg-white/5 opacity-40 cursor-not-allowed"
-                    title="Zoom (Coming Soon)"
-                >
-                    <ZoomIn className="w-5 h-5 text-white/40" />
                 </button>
 
                 {/* Divider */}

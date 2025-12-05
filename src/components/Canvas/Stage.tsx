@@ -26,20 +26,15 @@ const getStrokeOptions = (size: number) => ({
 });
 
 /**
- * Stage Component - Multi-Layer Canvas with Background Support
- * 
- * Three-layer architecture:
- * - Background Layer (z-0): Customizable color and pattern
- * - Static Layer (z-10): Renders completed stroke history
- * - Active Layer (z-20): Renders only the current stroke being drawn
+ * Stage Component - Multi-Layer Canvas with Keyboard Shortcuts
  */
 export default function Stage() {
     const staticLayerRef = useRef<HTMLCanvasElement>(null);
     const activeLayerRef = useRef<HTMLCanvasElement>(null);
     const { width, height, pixelRatio } = useWindowDimensions();
 
-    // Zustand store with separate pen/eraser widths
-    const { strokes, currentTool, penColor, penWidth, eraserWidth, addStroke } = useStore();
+    // Zustand store
+    const { strokes, currentTool, penColor, penWidth, eraserWidth, addStroke, undo, redo } = useStore();
 
     // Local drawing state
     const [isDrawing, setIsDrawing] = useState(false);
@@ -142,6 +137,30 @@ export default function Stage() {
     useEffect(() => {
         renderStaticLayer();
     }, [strokes, renderStaticLayer]);
+
+    // Keyboard Shortcuts: Undo (Ctrl+Z) and Redo (Ctrl+Y or Ctrl+Shift+Z)
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            const isCtrlOrCmd = e.ctrlKey || e.metaKey;
+
+            // Undo: Ctrl+Z (without Shift)
+            if (isCtrlOrCmd && e.key.toLowerCase() === 'z' && !e.shiftKey) {
+                e.preventDefault();
+                undo();
+                console.log('Undo triggered');
+            }
+
+            // Redo: Ctrl+Y or Ctrl+Shift+Z
+            if (isCtrlOrCmd && (e.key.toLowerCase() === 'y' || (e.shiftKey && e.key.toLowerCase() === 'z'))) {
+                e.preventDefault();
+                redo();
+                console.log('Redo triggered');
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [undo, redo]);
 
     // Pointer Down - Start drawing
     const handlePointerDown = useCallback((e: React.PointerEvent) => {
