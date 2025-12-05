@@ -1,6 +1,6 @@
 'use client';
 
-import { useStore } from '@/store/useStore';
+import { useStore, CanvasImage } from '@/store/useStore';
 import {
     Pencil,
     Eraser,
@@ -13,6 +13,7 @@ import {
     Minimize,
     Undo2,
     Redo2,
+    Image as ImageIcon,
     X
 } from 'lucide-react';
 import { useRef, useState, useEffect, useCallback } from 'react';
@@ -20,8 +21,37 @@ import { Pattern } from '@/types';
 
 type ActivePanel = 'none' | 'pen' | 'eraser' | 'bg';
 
+// Smart Scale: Calculate dimensions to fit viewport
+const calculateSmartScale = (
+    naturalWidth: number,
+    naturalHeight: number,
+    viewportWidth: number,
+    viewportHeight: number
+): { width: number; height: number; x: number; y: number } => {
+    const maxWidth = Math.min(600, viewportWidth * 0.5);
+    const maxHeight = viewportHeight * 0.6;
+
+    const aspectRatio = naturalWidth / naturalHeight;
+
+    let width = maxWidth;
+    let height = width / aspectRatio;
+
+    if (height > maxHeight) {
+        height = maxHeight;
+        width = height * aspectRatio;
+    }
+
+    const x = (viewportWidth - width) / 2;
+    const y = (viewportHeight - height) / 2;
+
+    return { width, height, x, y };
+};
+
+// Generate unique ID
+const generateId = () => `img-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
 /**
- * Toolbar Component - The Toggleable Cockpit with Undo/Redo
+ * Toolbar Component - The Toggleable Cockpit with Image Upload
  */
 export default function Toolbar() {
     const {
@@ -39,6 +69,7 @@ export default function Toolbar() {
         setEraserWidth,
         setCanvasBackground,
         setCanvasPattern,
+        addImage,
         undo,
         redo,
         clearCanvas
@@ -46,6 +77,7 @@ export default function Toolbar() {
 
     const penColorRef = useRef<HTMLInputElement>(null);
     const bgColorRef = useRef<HTMLInputElement>(null);
+    const imageInputRef = useRef<HTMLInputElement>(null);
 
     const [activePanel, setActivePanel] = useState<ActivePanel>('none');
     const [isFullscreen, setIsFullscreen] = useState(false);
@@ -83,6 +115,43 @@ export default function Toolbar() {
             console.error('Fullscreen error:', err);
         }
     }, []);
+
+    // Handle image upload with smart scaling
+    const handleImageUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file || !file.type.startsWith('image/')) return;
+
+        const url = URL.createObjectURL(file);
+        const img = new Image();
+
+        img.onload = () => {
+            const { width, height, x, y } = calculateSmartScale(
+                img.naturalWidth,
+                img.naturalHeight,
+                window.innerWidth,
+                window.innerHeight
+            );
+
+            const canvasImage: CanvasImage = {
+                id: generateId(),
+                url,
+                x,
+                y,
+                width,
+                height,
+                naturalWidth: img.naturalWidth,
+                naturalHeight: img.naturalHeight,
+            };
+
+            addImage(canvasImage);
+            console.log(`Image uploaded: ${img.naturalWidth}x${img.naturalHeight} -> ${width.toFixed(0)}x${height.toFixed(0)}`);
+        };
+
+        img.src = url;
+
+        // Reset input so same file can be uploaded again
+        e.target.value = '';
+    }, [addImage]);
 
     // Handle Pen icon click
     const handlePenClick = () => {
@@ -333,6 +402,23 @@ export default function Toolbar() {
 
                 {/* Divider */}
                 <div className="w-8 h-px bg-white/20 my-1" />
+
+                {/* Image Upload */}
+                <button
+                    onClick={() => imageInputRef.current?.click()}
+                    className="p-3 rounded-xl bg-white/5 hover:bg-white/15 
+            transition-all hover:scale-110"
+                    title="Add Image"
+                >
+                    <ImageIcon className="w-5 h-5 text-white/60" />
+                </button>
+                <input
+                    ref={imageInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageUpload}
+                    className="hidden"
+                />
 
                 {/* Undo Button */}
                 <button

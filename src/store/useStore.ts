@@ -1,13 +1,14 @@
 import { create } from 'zustand';
-import { Point, Stroke, Tool, Pattern } from '@/types';
+import { Point, Stroke, Tool, Pattern, CanvasImage } from '@/types';
 
 // Re-export types for convenience
-export type { Point, Stroke, Tool, Pattern };
+export type { Point, Stroke, Tool, Pattern, CanvasImage };
 
 // Store state
 interface CanvasState {
     strokes: Stroke[];
     redoStack: Stroke[];
+    images: CanvasImage[];
     currentTool: Tool;
 
     // Separate widths for pen and eraser
@@ -23,6 +24,8 @@ interface CanvasState {
     addStroke: (stroke: Omit<Stroke, 'isEraser'>) => void;
     undo: () => void;
     redo: () => void;
+    addImage: (image: CanvasImage) => void;
+    removeImage: (id: string) => void;
     setTool: (tool: Tool) => void;
     setPenColor: (color: string) => void;
     setPenWidth: (width: number) => void;
@@ -40,6 +43,7 @@ export const useStore = create<CanvasState>((set, get) => ({
     // Initial state
     strokes: [],
     redoStack: [],
+    images: [],
     currentTool: 'pen',
 
     // Separate widths
@@ -62,7 +66,6 @@ export const useStore = create<CanvasState>((set, get) => ({
                 color: isEraser ? '#000000' : state.penColor,
                 isEraser,
             }],
-            // CRITICAL: Clear redo stack when new stroke is added
             redoStack: [],
         });
     },
@@ -91,6 +94,20 @@ export const useStore = create<CanvasState>((set, get) => ({
         });
     },
 
+    // Add image to canvas
+    addImage: (image) => {
+        set((state) => ({
+            images: [...state.images, image],
+        }));
+    },
+
+    // Remove image from canvas
+    removeImage: (id) => {
+        set((state) => ({
+            images: state.images.filter((img) => img.id !== id),
+        }));
+    },
+
     // Set current tool
     setTool: (tool) => set({ currentTool: tool }),
 
@@ -105,8 +122,8 @@ export const useStore = create<CanvasState>((set, get) => ({
     setCanvasBackground: (color) => set({ canvasBackground: color }),
     setCanvasPattern: (pattern) => set({ canvasPattern: pattern }),
 
-    // Clear all strokes (also clears redo stack)
-    clearCanvas: () => set({ strokes: [], redoStack: [] }),
+    // Clear all strokes and images
+    clearCanvas: () => set({ strokes: [], redoStack: [], images: [] }),
 
     // Computed helpers
     canUndo: () => get().strokes.length > 0,

@@ -22,10 +22,22 @@ export interface StrokeConfig {
     size: number;
 }
 
+export interface CanvasImage {
+    id: string;
+    url: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    naturalWidth: number;
+    naturalHeight: number;
+}
+
 export interface AppState {
     strokes: Stroke[];
     currentConfig: StrokeConfig;
     currentTool: Tool;
     canvasBackground: string;
     canvasPattern: Pattern;
+    images: CanvasImage[];
 }

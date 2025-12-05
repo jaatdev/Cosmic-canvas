@@ -5,8 +5,9 @@ import { useWindowDimensions } from '@/hooks/useWindowDimensions';
 import getStroke from 'perfect-freehand';
 import { getSvgPathFromStroke } from '@/utils/ink';
 import { useStore } from '@/store/useStore';
-import { Point, Stroke } from '@/types';
+import { Point, Stroke, CanvasImage } from '@/types';
 import BackgroundLayer from './BackgroundLayer';
+import ObjectLayer from './ObjectLayer';
 
 // perfect-freehand options for gel pen feel
 const getStrokeOptions = (size: number) => ({
@@ -25,8 +26,39 @@ const getStrokeOptions = (size: number) => ({
     },
 });
 
+// Smart Scale: Calculate dimensions to fit viewport
+const calculateSmartScale = (
+    naturalWidth: number,
+    naturalHeight: number,
+    viewportWidth: number,
+    viewportHeight: number
+): { width: number; height: number; x: number; y: number } => {
+    const maxWidth = Math.min(600, viewportWidth * 0.5);
+    const maxHeight = viewportHeight * 0.6;
+
+    const aspectRatio = naturalWidth / naturalHeight;
+
+    let width = maxWidth;
+    let height = width / aspectRatio;
+
+    // If height exceeds max, scale down
+    if (height > maxHeight) {
+        height = maxHeight;
+        width = height * aspectRatio;
+    }
+
+    // Center on screen
+    const x = (viewportWidth - width) / 2;
+    const y = (viewportHeight - height) / 2;
+
+    return { width, height, x, y };
+};
+
+// Generate unique ID
+const generateId = () => `img-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
 /**
- * Stage Component - Multi-Layer Canvas with Keyboard Shortcuts
+ * Stage Component - Multi-Layer Canvas with Image Support
  */
 export default function Stage() {
     const staticLayerRef = useRef<HTMLCanvasElement>(null);
@@ -34,7 +66,7 @@ export default function Stage() {
     const { width, height, pixelRatio } = useWindowDimensions();
 
     // Zustand store
-    const { strokes, currentTool, penColor, penWidth, eraserWidth, addStroke, undo, redo } = useStore();
+    const { strokes, currentTool, penColor, penWidth, eraserWidth, addStroke, addImage, undo, redo } = useStore();
 
     // Local drawing state
     const [isDrawing, setIsDrawing] = useState(false);
@@ -138,23 +170,72 @@ export default function Stage() {
         renderStaticLayer();
     }, [strokes, renderStaticLayer]);
 
+    // Process image blob and add to canvas with smart scaling
+    const processImageBlob = useCallback((blob: Blob) => {
+        const url = URL.createObjectURL(blob);
+        const img = new Image();
+
+        img.onload = () => {
+            const { width: scaledWidth, height: scaledHeight, x, y } = calculateSmartScale(
+                img.naturalWidth,
+                img.naturalHeight,
+                window.innerWidth,
+                window.innerHeight
+            );
+
+            const canvasImage: CanvasImage = {
+                id: generateId(),
+                url,
+                x,
+                y,
+                width: scaledWidth,
+                height: scaledHeight,
+                naturalWidth: img.naturalWidth,
+                naturalHeight: img.naturalHeight,
+            };
+
+            addImage(canvasImage);
+            console.log(`Image added: ${img.naturalWidth}x${img.naturalHeight} -> ${scaledWidth.toFixed(0)}x${scaledHeight.toFixed(0)}`);
+        };
+
+        img.src = url;
+    }, [addImage]);
+
+    // Paste event handler (Smart Paste Engine)
+    useEffect(() => {
+        const handlePaste = (e: ClipboardEvent) => {
+            const items = e.clipboardData?.items;
+            if (!items) return;
+
+            for (const item of Array.from(items)) {
+                if (item.type.startsWith('image/')) {
+                    e.preventDefault();
+                    const blob = item.getAsFile();
+                    if (blob) {
+                        processImageBlob(blob);
+                    }
+                    break;
+                }
+            }
+        };
+
+        window.addEventListener('paste', handlePaste);
+        return () => window.removeEventListener('paste', handlePaste);
+    }, [processImageBlob]);
+
     // Keyboard Shortcuts: Undo (Ctrl+Z) and Redo (Ctrl+Y or Ctrl+Shift+Z)
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             const isCtrlOrCmd = e.ctrlKey || e.metaKey;
 
-            // Undo: Ctrl+Z (without Shift)
             if (isCtrlOrCmd && e.key.toLowerCase() === 'z' && !e.shiftKey) {
                 e.preventDefault();
                 undo();
-                console.log('Undo triggered');
             }
 
-            // Redo: Ctrl+Y or Ctrl+Shift+Z
             if (isCtrlOrCmd && (e.key.toLowerCase() === 'y' || (e.shiftKey && e.key.toLowerCase() === 'z'))) {
                 e.preventDefault();
                 redo();
-                console.log('Redo triggered');
             }
         };
 
@@ -261,13 +342,19 @@ export default function Stage() {
             onPointerUp={handlePointerUp}
             onPointerLeave={handlePointerLeave}
         >
+            {/* Z-Index 0: Background */}
             <BackgroundLayer />
 
+            {/* Z-Index 5: Images */}
+            <ObjectLayer />
+
+            {/* Z-Index 10: Stroke History */}
             <canvas
                 ref={staticLayerRef}
                 style={{ ...canvasStyle, zIndex: 10, pointerEvents: 'none' }}
             />
 
+            {/* Z-Index 20: Active Stroke */}
             <canvas
                 ref={activeLayerRef}
                 style={{ ...canvasStyle, zIndex: 20, pointerEvents: 'none' }}
