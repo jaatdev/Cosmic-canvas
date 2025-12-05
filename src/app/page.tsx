@@ -1,5 +1,5 @@
-import Whiteboard from "@/components/Canvas/Whiteboard";
+import Stage from "@/components/Canvas/Stage";
 
 export default function Home() {
-  return <Whiteboard />;
+  return <Stage />;
 }
