@@ -74,6 +74,7 @@ export default function Toolbar() {
         pageCount,
         pageHeight,
         zoom,
+        isFullscreen,
         setTool,
         setPenColor,
         setPenWidth,
@@ -86,7 +87,8 @@ export default function Toolbar() {
         clearCanvas,
         zoomIn,
         zoomOut,
-        resetZoom
+        resetZoom,
+        setIsFullscreen
     } = useStore();
 
     const penColorRef = useRef<HTMLInputElement>(null);
@@ -94,7 +96,6 @@ export default function Toolbar() {
     const imageInputRef = useRef<HTMLInputElement>(null);
 
     const [activePanel, setActivePanel] = useState<ActivePanel>('none');
-    const [isFullscreen, setIsFullscreen] = useState(false);
     const [isExporting, setIsExporting] = useState(false);
 
     const isPen = currentTool === 'pen';
@@ -110,14 +111,14 @@ export default function Toolbar() {
         { id: 'lines', icon: <Minus className="w-4 h-4" />, label: 'Lines' },
     ];
 
-    // Track fullscreen state
+    // Track fullscreen state (syncs with Esc key exit)
     useEffect(() => {
         const handleFullscreenChange = () => {
             setIsFullscreen(!!document.fullscreenElement);
         };
         document.addEventListener('fullscreenchange', handleFullscreenChange);
         return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
-    }, []);
+    }, [setIsFullscreen]);
 
     // Toggle fullscreen
     const toggleFullscreen = useCallback(async () => {
@@ -459,7 +460,10 @@ export default function Toolbar() {
     };
 
     return (
-        <div className="fixed right-4 top-1/2 -translate-y-1/2 z-50">
+        <div className={`fixed right-4 top-1/2 -translate-y-1/2 z-50 transition-opacity duration-500 ${isFullscreen
+            ? 'opacity-0 hover:opacity-100 delay-700'
+            : 'opacity-100'
+            }`}>
             {/* Floating Panel */}
             <div className="relative">
                 {renderPanel()}

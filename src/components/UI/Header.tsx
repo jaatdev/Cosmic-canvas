@@ -6,12 +6,16 @@ import { useStore } from '@/store/useStore';
  * Header Component - Project Title Input
  * 
  * Transparent input that looks like it's part of the canvas.
+ * Auto-hides in fullscreen (Zen Mode) and reveals on hover.
  */
 export default function Header() {
-    const { projectName, setProjectName } = useStore();
+    const { projectName, setProjectName, isFullscreen } = useStore();
 
     return (
-        <div className="fixed top-4 left-4 z-50">
+        <div className={`fixed top-4 left-4 z-50 transition-opacity duration-500 ${isFullscreen
+                ? 'opacity-0 hover:opacity-100 delay-700'
+                : 'opacity-100'
+            }`}>
             <input
                 type="text"
                 value={projectName}

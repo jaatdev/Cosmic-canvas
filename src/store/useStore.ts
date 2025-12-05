@@ -19,6 +19,7 @@ interface CanvasState {
     pageCount: number;
     pageHeight: number;
     zoom: number;
+    isFullscreen: boolean;
 
     // Separate widths for pen and eraser
     penColor: string;
@@ -44,6 +45,7 @@ interface CanvasState {
     zoomIn: () => void;
     zoomOut: () => void;
     resetZoom: () => void;
+    setIsFullscreen: (value: boolean) => void;
     setPenColor: (color: string) => void;
     setPenWidth: (width: number) => void;
     setEraserWidth: (width: number) => void;
@@ -68,7 +70,8 @@ export const useStore = create<CanvasState>((set, get) => ({
     projectName: 'Untitled Universe',
     pageCount: 1,
     pageHeight: 0,
-    zoom: 1, // 100% zoom
+    zoom: 1,
+    isFullscreen: false,
 
     // Separate widths
     penColor: '#000000',
@@ -196,6 +199,9 @@ export const useStore = create<CanvasState>((set, get) => ({
     zoomIn: () => set((state) => ({ zoom: Math.min(5.0, Math.round((state.zoom + 0.1) * 10) / 10) })),
     zoomOut: () => set((state) => ({ zoom: Math.max(0.1, Math.round((state.zoom - 0.1) * 10) / 10) })),
     resetZoom: () => set({ zoom: 1 }),
+
+    // Fullscreen / Zen Mode
+    setIsFullscreen: (value) => set({ isFullscreen: value }),
 
     // Pen settings
     setPenColor: (color) => set({ penColor: color }),
