@@ -24,13 +24,17 @@ const getStrokeOptions = (size: number) => ({
 });
 
 /**
- * Stage Component - The Memory Layer
+ * Stage Component - Multi-Layer Canvas (Performance Optimized)
  * 
- * Full-screen canvas with stroke persistence via Zustand.
- * All completed strokes are stored and rendered from history.
+ * Two-canvas architecture:
+ * - Static Layer (z-10): Renders completed stroke history
+ * - Active Layer (z-20): Renders only the current stroke being drawn
+ * 
+ * This prevents redrawing the entire history on every frame.
  */
 export default function Stage() {
-    const canvasRef = useRef<HTMLCanvasElement>(null);
+    const staticLayerRef = useRef<HTMLCanvasElement>(null);
+    const activeLayerRef = useRef<HTMLCanvasElement>(null);
     const { width, height, pixelRatio } = useWindowDimensions();
 
     // Zustand store
@@ -40,7 +44,7 @@ export default function Stage() {
     const [isDrawing, setIsDrawing] = useState(false);
     const currentPointsRef = useRef<Point[] | null>(null);
 
-    // Draw a single stroke to canvas
+    // Draw a single stroke to a canvas context
     const drawStroke = useCallback((
         ctx: CanvasRenderingContext2D,
         stroke: Stroke
@@ -56,26 +60,53 @@ export default function Stage() {
         ctx.fill(path);
     }, []);
 
-    // Render all strokes (history + current)
-    const render = useCallback(() => {
-        const canvas = canvasRef.current;
+    // Setup both canvases with High-DPI scaling
+    const setupCanvas = useCallback((canvas: HTMLCanvasElement | null) => {
+        if (!canvas || width === 0 || height === 0) return null;
+
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return null;
+
+        // Set internal buffer size
+        canvas.width = width * pixelRatio;
+        canvas.height = height * pixelRatio;
+
+        // Scale context
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.scale(pixelRatio, pixelRatio);
+
+        return ctx;
+    }, [width, height, pixelRatio]);
+
+    // Render static layer (stroke history) - only when strokes change
+    const renderStaticLayer = useCallback(() => {
+        const ctx = setupCanvas(staticLayerRef.current);
+        if (!ctx) return;
+
+        // Clear and draw background
+        ctx.fillStyle = '#1e1e1e';
+        ctx.fillRect(0, 0, width, height);
+
+        // Draw all completed strokes
+        strokes.forEach((stroke) => drawStroke(ctx, stroke));
+
+        console.log(`Static layer rendered: ${strokes.length} strokes`);
+    }, [width, height, strokes, setupCanvas, drawStroke]);
+
+    // Render active layer (current stroke only) - called on every frame while drawing
+    const renderActiveLayer = useCallback(() => {
+        const canvas = activeLayerRef.current;
         if (!canvas || width === 0 || height === 0) return;
 
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
 
-        // Clear and setup
+        // Clear active layer (transparent)
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.scale(pixelRatio, pixelRatio);
+        ctx.clearRect(0, 0, width, height);
 
-        // Background
-        ctx.fillStyle = '#1e1e1e';
-        ctx.fillRect(0, 0, width, height);
-
-        // Draw all completed strokes from history
-        strokes.forEach((stroke) => drawStroke(ctx, stroke));
-
-        // Draw current active stroke (if any)
+        // Draw current stroke if exists
         const currentPoints = currentPointsRef.current;
         if (currentPoints && currentPoints.length >= 2) {
             drawStroke(ctx, {
@@ -84,44 +115,35 @@ export default function Stage() {
                 size: currentConfig.size,
             });
         }
-    }, [width, height, pixelRatio, strokes, currentConfig, drawStroke]);
+    }, [width, height, pixelRatio, currentConfig, drawStroke]);
 
-    // Setup canvas on mount/resize
+    // Setup canvases on mount/resize
     useEffect(() => {
-        const canvas = canvasRef.current;
-        if (!canvas || width === 0 || height === 0) return;
-
-        // Set internal buffer size
-        canvas.width = width * pixelRatio;
-        canvas.height = height * pixelRatio;
-
+        setupCanvas(staticLayerRef.current);
+        setupCanvas(activeLayerRef.current);
         console.log(`Canvas Setup: ${width}x${height} @ ${pixelRatio}x DPI`);
+    }, [width, height, pixelRatio, setupCanvas]);
 
-        // Initial render
-        render();
-    }, [width, height, pixelRatio, render]);
-
-    // Re-render when strokes change
+    // Re-render static layer when stroke history changes
     useEffect(() => {
-        render();
-    }, [strokes, render]);
+        renderStaticLayer();
+    }, [strokes, renderStaticLayer]);
 
     // Pointer Down - Start drawing
-    const handlePointerDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+    const handlePointerDown = useCallback((e: React.PointerEvent) => {
         // PALM REJECTION
         if (e.pointerType === 'touch') {
             console.log('Touch rejected (palm rejection)');
             return;
         }
 
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-
-        (e.target as HTMLCanvasElement).setPointerCapture(e.pointerId);
-
-        const rect = canvas.getBoundingClientRect();
+        const container = e.currentTarget as HTMLElement;
+        const rect = container.getBoundingClientRect();
         const x = e.clientX - rect.left;
         const y = e.clientY - rect.top;
+
+        // Capture pointer
+        (e.target as HTMLElement).setPointerCapture(e.pointerId);
 
         // Start new stroke
         currentPointsRef.current = [{ x, y, pressure: e.pressure || 0.5 }];
@@ -130,27 +152,28 @@ export default function Stage() {
         console.log(`Start stroke: (${x.toFixed(1)}, ${y.toFixed(1)})`);
     }, []);
 
-    // Pointer Move - Continue drawing
-    const handlePointerMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+    // Pointer Move - Continue drawing (FAST LOOP - only active layer)
+    const handlePointerMove = useCallback((e: React.PointerEvent) => {
         if (!isDrawing) return;
         if (e.pointerType === 'touch') return;
 
-        const canvas = canvasRef.current;
-        if (!canvas || !currentPointsRef.current) return;
-
-        const rect = canvas.getBoundingClientRect();
+        const container = e.currentTarget as HTMLElement;
+        const rect = container.getBoundingClientRect();
         const x = e.clientX - rect.left;
         const y = e.clientY - rect.top;
 
-        currentPointsRef.current.push({ x, y, pressure: e.pressure || 0.5 });
-        render();
-    }, [isDrawing, render]);
+        if (currentPointsRef.current) {
+            currentPointsRef.current.push({ x, y, pressure: e.pressure || 0.5 });
+            // Only render active layer - NOT the static layer
+            renderActiveLayer();
+        }
+    }, [isDrawing, renderActiveLayer]);
 
     // Pointer Up - End drawing and save stroke
-    const handlePointerUp = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+    const handlePointerUp = useCallback((e: React.PointerEvent) => {
         if (e.pointerType === 'touch') return;
 
-        (e.target as HTMLCanvasElement).releasePointerCapture(e.pointerId);
+        (e.target as HTMLElement).releasePointerCapture(e.pointerId);
 
         const points = currentPointsRef.current;
         if (points && points.length >= 2) {
@@ -163,15 +186,24 @@ export default function Stage() {
             console.log(`Stroke saved: ${points.length} points`);
         }
 
-        // Reset current stroke
+        // Clear current stroke IMMEDIATELY
         currentPointsRef.current = null;
         setIsDrawing(false);
+
+        // Clear active layer
+        const canvas = activeLayerRef.current;
+        if (canvas) {
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+                ctx.setTransform(1, 0, 0, 1, 0, 0);
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+            }
+        }
     }, [addStroke, currentConfig]);
 
-    // Pointer Leave
-    const handlePointerLeave = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+    // Pointer Leave - Save stroke if still drawing
+    const handlePointerLeave = useCallback((e: React.PointerEvent) => {
         if (isDrawing && currentPointsRef.current) {
-            // Save stroke if we leave while drawing
             const points = currentPointsRef.current;
             if (points.length >= 2) {
                 addStroke({
@@ -185,20 +217,39 @@ export default function Stage() {
         }
     }, [isDrawing, addStroke, currentConfig]);
 
+    const canvasStyle: React.CSSProperties = {
+        position: 'absolute',
+        inset: 0,
+        width: '100%',
+        height: '100%',
+    };
+
     return (
-        <canvas
-            ref={canvasRef}
+        <div
+            style={{
+                position: 'relative',
+                width: '100vw',
+                height: '100vh',
+                overflow: 'hidden',
+                touchAction: 'none',
+                cursor: 'crosshair',
+            }}
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
             onPointerLeave={handlePointerLeave}
-            style={{
-                width: '100vw',
-                height: '100vh',
-                display: 'block',
-                touchAction: 'none',
-                cursor: 'crosshair',
-            }}
-        />
+        >
+            {/* Static Layer - Stroke History (z-10) */}
+            <canvas
+                ref={staticLayerRef}
+                style={{ ...canvasStyle, zIndex: 10, pointerEvents: 'none' }}
+            />
+
+            {/* Active Layer - Current Stroke (z-20) */}
+            <canvas
+                ref={activeLayerRef}
+                style={{ ...canvasStyle, zIndex: 20, pointerEvents: 'none' }}
+            />
+        </div>
     );
 }
