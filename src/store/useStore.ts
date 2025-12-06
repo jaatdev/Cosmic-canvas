@@ -73,13 +73,13 @@ export const useStore = create<CanvasState>((set, get) => ({
     zoom: 1,
     isFullscreen: false,
 
-    // Separate widths
-    penColor: '#000000',
-    penWidth: 8,
+    // Separate widths - Dark Slate Aesthetic
+    penColor: '#d7d5d5',     // Light Grey (silver ink)
+    penWidth: 3,             // Finer control
     eraserWidth: 20,
 
-    // Background
-    canvasBackground: '#ffffff',
+    // Background - Dark Slate
+    canvasBackground: '#3e3d3d',  // Dark Grey
     canvasPattern: 'none',
 
     // Add stroke with unified history
