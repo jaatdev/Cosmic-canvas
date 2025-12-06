@@ -6,6 +6,7 @@ import getStroke from 'perfect-freehand';
 import { getSvgPathFromStroke } from '@/utils/ink';
 import { useStore } from '@/store/useStore';
 import { Point, Stroke, CanvasImage } from '@/types';
+import { PAGE_HEIGHT } from '@/constants/canvas';
 import BackgroundLayer from './BackgroundLayer';
 import ObjectLayer from './ObjectLayer';
 
@@ -91,15 +92,13 @@ export default function Stage() {
     const [isBarrelButtonDown, setIsBarrelButtonDown] = useState(false);
     const currentPointsRef = useRef<Point[] | null>(null);
 
-    // Total canvas height (all pages)
-    const totalHeight = height * pageCount;
+    // Total canvas height (all pages) - uses FIXED PAGE_HEIGHT
+    const totalHeight = PAGE_HEIGHT * pageCount;
 
-    // Set page height on mount
+    // Set fixed page height on mount (for export and other calculations)
     useEffect(() => {
-        if (height > 0) {
-            setPageHeight(height);
-        }
-    }, [height, setPageHeight]);
+        setPageHeight(PAGE_HEIGHT);
+    }, [setPageHeight]);
 
     // Get current stroke settings based on tool
     const getCurrentStrokeSettings = useCallback(() => {
@@ -143,7 +142,8 @@ export default function Stage() {
         ctx.fillStyle = '#3b82f6';
 
         for (let i = 1; i < pageCount; i++) {
-            const y = i * height;
+            // Use fixed PAGE_HEIGHT for consistent page boundaries
+            const y = i * PAGE_HEIGHT;
 
             // Draw dashed line
             ctx.beginPath();
@@ -156,7 +156,7 @@ export default function Stage() {
         }
 
         ctx.restore();
-    }, [pageCount, width, height]);
+    }, [pageCount, width]);
 
     // Setup canvas with High-DPI scaling - MUST update on pageCount change
     const setupCanvas = useCallback((canvas: HTMLCanvasElement | null, forceRedraw: boolean = false) => {
@@ -316,6 +316,7 @@ export default function Stage() {
     }, [processImageBlob]);
 
     // Full-page scroll: One wheel tick = one page jump (like PowerPoint/notebook)
+    // Uses FIXED PAGE_HEIGHT for consistent scrolling
     useEffect(() => {
         let isScrolling = false; // Debounce to prevent multiple triggers
 
@@ -327,7 +328,8 @@ export default function Stage() {
             isScrolling = true;
 
             const currentScrollY = window.scrollY;
-            const currentPage = Math.round(currentScrollY / height);
+            // Use fixed PAGE_HEIGHT for page calculation
+            const currentPage = Math.round(currentScrollY / PAGE_HEIGHT);
 
             let targetPage: number;
             if (e.deltaY > 0) {
@@ -338,7 +340,8 @@ export default function Stage() {
                 targetPage = Math.max(currentPage - 1, 0);
             }
 
-            const targetY = targetPage * height;
+            // Use fixed PAGE_HEIGHT for target position
+            const targetY = targetPage * PAGE_HEIGHT;
 
             window.scrollTo({
                 top: targetY,
@@ -353,7 +356,7 @@ export default function Stage() {
 
         window.addEventListener('wheel', handleWheel, { passive: false });
         return () => window.removeEventListener('wheel', handleWheel);
-    }, [height, pageCount]);
+    }, [pageCount]);
 
     // Keyboard Shortcuts
     useEffect(() => {
@@ -535,16 +538,17 @@ export default function Stage() {
                 }}
             >
                 {/* Scroll Snap Targets - invisible page markers for notebook-style scrolling */}
+                {/* Uses FIXED PAGE_HEIGHT for consistent page positions */}
                 {Array.from({ length: pageCount }).map((_, i) => (
                     <div
                         key={`page-snap-${i}`}
                         className="page-snap"
                         style={{
                             position: 'absolute',
-                            top: i * height,
+                            top: i * PAGE_HEIGHT,
                             left: 0,
                             width: '100%',
-                            height: height,
+                            height: PAGE_HEIGHT,
                             scrollSnapAlign: 'start',
                             scrollSnapStop: 'always',
                             pointerEvents: 'none',

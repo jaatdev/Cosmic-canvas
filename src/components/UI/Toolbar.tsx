@@ -2,6 +2,7 @@
 
 import { useStore, CanvasImage } from '@/store/useStore';
 import { exportToPdf } from '@/utils/export';
+import { PAGE_HEIGHT } from '@/constants/canvas';
 import {
     Pencil,
     Eraser,
@@ -75,7 +76,6 @@ export default function Toolbar() {
         images,
         projectName,
         pageCount,
-        pageHeight,
         zoom,
         isFullscreen,
         setTool,
@@ -160,7 +160,7 @@ export default function Toolbar() {
         }
     }, []);
 
-    // Export handler
+    // Export handler - uses fixed PAGE_HEIGHT for consistent PDF output
     const handleExport = useCallback(async () => {
         if (isExporting) return;
         setIsExporting(true);
@@ -168,7 +168,7 @@ export default function Toolbar() {
         try {
             await exportToPdf(strokes, images, {
                 width: window.innerWidth,
-                pageHeight: pageHeight || window.innerHeight,
+                pageHeight: PAGE_HEIGHT, // Use fixed PAGE_HEIGHT for consistent pages
                 pageCount,
                 background: canvasBackground,
                 pattern: canvasPattern,
@@ -179,7 +179,7 @@ export default function Toolbar() {
         } finally {
             setIsExporting(false);
         }
-    }, [isExporting, strokes, images, pageHeight, pageCount, canvasBackground, canvasPattern, projectName]);
+    }, [isExporting, strokes, images, pageCount, canvasBackground, canvasPattern, projectName]);
 
     // Image upload handler
     const handleImageUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
