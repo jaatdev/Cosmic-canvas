@@ -31,7 +31,7 @@ interface CanvasState {
     canvasPattern: Pattern;
 
     // Actions
-    addStroke: (stroke: Omit<Stroke, 'id' | 'isEraser'>) => void;
+    addStroke: (stroke: Omit<Stroke, 'id' | 'isEraser'>, forceEraser?: boolean) => void;
     addImage: (image: CanvasImage) => void;
     selectImage: (id: string | null) => void;
     updateImage: (id: string, updates: Partial<CanvasImage>) => void;
@@ -83,9 +83,10 @@ export const useStore = create<CanvasState>((set, get) => ({
     canvasPattern: 'none',
 
     // Add stroke with unified history
-    addStroke: (strokeData) => {
+    addStroke: (strokeData, forceEraser) => {
         const state = get();
-        const isEraser = state.currentTool === 'eraser';
+        // Use forceEraser if provided (for barrel button), otherwise check current tool
+        const isEraser = forceEraser !== undefined ? forceEraser : state.currentTool === 'eraser';
 
         const stroke: Stroke = {
             id: generateId(),

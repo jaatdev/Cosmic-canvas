@@ -88,6 +88,7 @@ export default function Stage() {
 
     // Local drawing state
     const [isDrawing, setIsDrawing] = useState(false);
+    const [isBarrelButtonDown, setIsBarrelButtonDown] = useState(false);
     const currentPointsRef = useRef<Point[] | null>(null);
 
     // Total canvas height (all pages)
@@ -209,6 +210,7 @@ export default function Stage() {
     }, [width, totalHeight, pixelRatio, strokes, drawStroke, drawPageSeparators]);
 
     // Render active layer (current stroke only)
+    // Account for barrel button override for visual feedback
     const renderActiveLayer = useCallback(() => {
         const canvas = activeLayerRef.current;
         if (!canvas || width === 0 || totalHeight === 0) return;
@@ -231,9 +233,11 @@ export default function Stage() {
 
         const currentPoints = currentPointsRef.current;
         if (currentPoints && currentPoints.length >= 2) {
+            // Check barrel button state to override eraser mode
             const settings = getCurrentStrokeSettings();
+            const effectiveIsEraser = isBarrelButtonDown || settings.isEraser;
 
-            if (settings.isEraser) {
+            if (effectiveIsEraser) {
                 ctx.globalCompositeOperation = 'destination-out';
             } else {
                 ctx.globalCompositeOperation = 'source-over';
@@ -241,12 +245,14 @@ export default function Stage() {
 
             drawStroke(ctx, {
                 points: currentPoints,
-                ...settings,
+                color: effectiveIsEraser ? '#000000' : settings.color,
+                size: effectiveIsEraser ? eraserWidth : settings.size,
+                isEraser: effectiveIsEraser,
             });
 
             ctx.globalCompositeOperation = 'source-over';
         }
-    }, [width, totalHeight, pixelRatio, getCurrentStrokeSettings, drawStroke]);
+    }, [width, totalHeight, pixelRatio, getCurrentStrokeSettings, drawStroke, isBarrelButtonDown, eraserWidth]);
 
     // Re-render static layer when stroke history or page count changes
     useEffect(() => {
@@ -371,14 +377,21 @@ export default function Stage() {
 
     // Pointer Down - Start drawing or deselect
     // Uses pageX/pageY for document-relative coordinates
+    // IRON PALM: Only allow pen and mouse, reject all touch input
     const handlePointerDown = useCallback((e: React.PointerEvent) => {
-        if (e.pointerType === 'touch') return;
+        // Strict palm rejection: only allow 'pen' or 'mouse', reject 'touch'
+        if (e.pointerType !== 'pen' && e.pointerType !== 'mouse') return;
 
         // In select mode, clicking empty canvas deselects image
         if (currentTool === 'select') {
             selectImage(null);
             return;
         }
+
+        // Smart Button Logic: Check if barrel button (right-click/side button) is pressed
+        // Bitmask: button 2 = right-click or pen barrel button
+        const isSideButton = (e.buttons & 2) === 2;
+        setIsBarrelButtonDown(isSideButton);
 
         // Use pageX/pageY for document-relative coordinates
         // Divide by zoom to get internal canvas coordinates
@@ -392,9 +405,17 @@ export default function Stage() {
     }, [currentTool, selectImage, zoom]);
 
     // Pointer Move - Continue drawing
+    // IRON PALM: Strict filtering for pen/mouse only
     const handlePointerMove = useCallback((e: React.PointerEvent) => {
         if (!isDrawing) return;
-        if (e.pointerType === 'touch') return;
+        // Strict palm rejection: only allow 'pen' or 'mouse', reject 'touch'
+        if (e.pointerType !== 'pen' && e.pointerType !== 'mouse') return;
+
+        // Continue tracking barrel button state during stroke
+        const isSideButton = (e.buttons & 2) === 2;
+        if (isSideButton !== isBarrelButtonDown) {
+            setIsBarrelButtonDown(isSideButton);
+        }
 
         // Use pageX/pageY divided by zoom for accurate drawing
         const x = e.pageX / zoom;
@@ -404,26 +425,41 @@ export default function Stage() {
             currentPointsRef.current.push({ x, y, pressure: e.pressure || 0.5 });
             renderActiveLayer();
         }
-    }, [isDrawing, renderActiveLayer, zoom]);
+    }, [isDrawing, isBarrelButtonDown, renderActiveLayer, zoom]);
 
     // Pointer Up - End drawing and save stroke
+    // IRON PALM: Strict filtering for pen/mouse only
     const handlePointerUp = useCallback((e: React.PointerEvent) => {
-        if (e.pointerType === 'touch') return;
+        // Strict palm rejection: only allow 'pen' or 'mouse', reject 'touch'
+        if (e.pointerType !== 'pen' && e.pointerType !== 'mouse') return;
 
         (e.target as HTMLElement).releasePointerCapture(e.pointerId);
 
         const points = currentPointsRef.current;
         if (points && points.length >= 2) {
-            const settings = getCurrentStrokeSettings();
-            addStroke({
-                points,
-                color: settings.color,
-                size: settings.size,
-            });
+            // If barrel button was held, force eraser mode for this stroke only
+            const wasBarrelButtonErasing = isBarrelButtonDown;
+
+            if (wasBarrelButtonErasing) {
+                // Force eraser stroke using forceEraser parameter
+                addStroke({
+                    points,
+                    color: '#000000',
+                    size: eraserWidth,
+                }, true); // forceEraser = true
+            } else {
+                const settings = getCurrentStrokeSettings();
+                addStroke({
+                    points,
+                    color: settings.color,
+                    size: settings.size,
+                });
+            }
         }
 
         currentPointsRef.current = null;
         setIsDrawing(false);
+        setIsBarrelButtonDown(false);
 
         const canvas = activeLayerRef.current;
         if (canvas) {
@@ -433,7 +469,7 @@ export default function Stage() {
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
             }
         }
-    }, [addStroke, getCurrentStrokeSettings]);
+    }, [addStroke, getCurrentStrokeSettings, isBarrelButtonDown, eraserWidth]);
 
     // Pointer Leave
     const handlePointerLeave = useCallback((e: React.PointerEvent) => {
@@ -459,6 +495,14 @@ export default function Stage() {
         height: '100%',
     };
 
+    // Determine cursor: barrel button erasing overrides tool cursor
+    const getCursor = () => {
+        if (isBarrelButtonDown) return 'cell'; // Eraser cursor when barrel button held
+        if (currentTool === 'eraser') return 'cell';
+        if (currentTool === 'select') return 'default';
+        return 'crosshair';
+    };
+
     return (
         <div
             ref={containerRef}
@@ -468,9 +512,14 @@ export default function Stage() {
                 height: totalHeight * zoom, // Scale container height with zoom
                 minHeight: '100vh',
                 overflow: 'visible',
+                // CSS Hardening for palm rejection
                 touchAction: 'none',
-                cursor: currentTool === 'eraser' ? 'cell' : currentTool === 'select' ? 'default' : 'crosshair',
+                userSelect: 'none',
+                WebkitUserSelect: 'none',
+                cursor: getCursor(),
             }}
+            // Disable context menu (prevents right-click menu from palm/pen button)
+            onContextMenu={(e) => e.preventDefault()}
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
