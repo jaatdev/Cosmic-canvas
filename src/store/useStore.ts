@@ -1,8 +1,8 @@
 import { create } from 'zustand';
-import { Point, Stroke, Tool, Pattern, CanvasImage, ActionItem, ShapeType } from '@/types';
+import { Point, Stroke, Tool, Pattern, CanvasImage, ActionItem, ShapeType, TextNode } from '@/types';
 
 // Re-export types for convenience
-export type { Point, Stroke, Tool, Pattern, CanvasImage, ActionItem, ShapeType };
+export type { Point, Stroke, Tool, Pattern, CanvasImage, ActionItem, ShapeType, TextNode };
 
 // Generate unique ID
 const generateId = () => `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -30,6 +30,12 @@ interface CanvasState {
     // Shape tool
     activeShape: ShapeType;
 
+    // Text tool
+    textNodes: TextNode[];
+    activeFont: string;
+    activeFontSize: number;
+    selectedId: string | null; // Unified selection for images and text
+
     // Background
     canvasBackground: string;
     canvasPattern: Pattern;
@@ -40,6 +46,10 @@ interface CanvasState {
     selectImage: (id: string | null) => void;
     updateImage: (id: string, updates: Partial<CanvasImage>) => void;
     deleteSelectedImage: () => void;
+    addTextNode: (node: TextNode) => void;
+    updateTextNode: (id: string, updates: Partial<TextNode>) => void;
+    deleteTextNode: (id: string) => void;
+    deleteSelectedObject: () => void;
     undo: () => void;
     redo: () => void;
     setTool: (tool: Tool) => void;
@@ -59,6 +69,8 @@ interface CanvasState {
     setPenWidth: (width: number) => void;
     setEraserWidth: (width: number) => void;
     setShape: (shape: ShapeType) => void;
+    setFont: (font: string) => void;
+    setFontSize: (size: number) => void;
     setCanvasBackground: (color: string) => void;
     setCanvasPattern: (pattern: Pattern) => void;
     clearCanvas: () => void;
@@ -95,6 +107,12 @@ export const useStore = create<CanvasState>((set, get) => ({
     // Background - Dark Slate
     canvasBackground: '#3e3d3d',  // Dark Grey
     canvasPattern: 'none',
+
+    // Text tool - defaults
+    textNodes: [],
+    activeFont: 'Inter',
+    activeFontSize: 24,
+    selectedId: null,
 
     // Add stroke with unified history
     addStroke: (strokeData, forceEraser, isShape) => {
@@ -161,6 +179,72 @@ export const useStore = create<CanvasState>((set, get) => ({
         });
     },
 
+    // Add text node with unified history + auto-select
+    addTextNode: (node) => {
+        const state = get();
+        set({
+            textNodes: [...state.textNodes, node],
+            historyStack: [...state.historyStack, { type: 'text', data: node }],
+            redoStack: [],
+            currentTool: 'select',
+            selectedId: node.id,
+        });
+    },
+
+    // Update text node properties
+    updateTextNode: (id, updates) => {
+        set((state) => ({
+            textNodes: state.textNodes.map((node) =>
+                node.id === id ? { ...node, ...updates } : node
+            ),
+        }));
+    },
+
+    // Delete text node (with undo support)
+    deleteTextNode: (id) => {
+        const state = get();
+        const nodeToDelete = state.textNodes.find(node => node.id === id);
+        if (!nodeToDelete) return;
+
+        set({
+            textNodes: state.textNodes.filter(node => node.id !== id),
+            historyStack: [...state.historyStack, { type: 'text', data: { ...nodeToDelete, _deleted: true } as any }],
+            redoStack: [],
+            selectedId: state.selectedId === id ? null : state.selectedId,
+        });
+    },
+
+    // Unified delete for both images and text
+    deleteSelectedObject: () => {
+        const state = get();
+        if (!state.selectedId) return;
+
+        // Check if it's an image
+        const image = state.images.find(img => img.id === state.selectedId);
+        if (image) {
+            set({
+                images: state.images.filter(img => img.id !== state.selectedId),
+                historyStack: [...state.historyStack, { type: 'image', data: { ...image, _deleted: true } as CanvasImage }],
+                redoStack: [],
+                selectedId: null,
+                currentTool: 'select',
+            });
+            return;
+        }
+
+        // Check if it's a text node
+        const textNode = state.textNodes.find(node => node.id === state.selectedId);
+        if (textNode) {
+            set({
+                textNodes: state.textNodes.filter(node => node.id !== state.selectedId),
+                historyStack: [...state.historyStack, { type: 'text', data: { ...textNode, _deleted: true } as any }],
+                redoStack: [],
+                selectedId: null,
+                currentTool: 'select',
+            });
+        }
+    },
+
     // Unified undo
     undo: () => {
         const state = get();
@@ -194,6 +278,27 @@ export const useStore = create<CanvasState>((set, get) => ({
                     historyStack: newHistoryStack,
                     redoStack: [...state.redoStack, lastAction],
                     selectedImageId: state.selectedImageId === lastAction.data.id ? null : state.selectedImageId,
+                });
+            }
+        } else if (lastAction.type === 'text') {
+            const textData = lastAction.data as TextNode & { _deleted?: boolean };
+
+            if (textData._deleted) {
+                // Undoing a deletion - restore the text node
+                const { _deleted, ...cleanNode } = textData;
+                set({
+                    textNodes: [...state.textNodes, cleanNode as TextNode],
+                    historyStack: newHistoryStack,
+                    redoStack: [...state.redoStack, lastAction],
+                    selectedId: cleanNode.id,  // Select the restored node
+                });
+            } else {
+                // Undoing an add - remove the text node
+                set({
+                    textNodes: state.textNodes.filter(n => n.id !== lastAction.data.id),
+                    historyStack: newHistoryStack,
+                    redoStack: [...state.redoStack, lastAction],
+                    selectedId: state.selectedId === lastAction.data.id ? null : state.selectedId,
                 });
             }
         } else if (lastAction.type === 'page_op') {
@@ -302,6 +407,25 @@ export const useStore = create<CanvasState>((set, get) => ({
                 // Redoing an add - add the image back
                 set({
                     images: [...state.images, actionToRedo.data],
+                    historyStack: [...state.historyStack, actionToRedo],
+                    redoStack: newRedoStack,
+                });
+            }
+        } else if (actionToRedo.type === 'text') {
+            const textData = actionToRedo.data as TextNode & { _deleted?: boolean };
+
+            if (textData._deleted) {
+                // Redoing a deletion - remove the text node again
+                set({
+                    textNodes: state.textNodes.filter(n => n.id !== textData.id),
+                    historyStack: [...state.historyStack, actionToRedo],
+                    redoStack: newRedoStack,
+                    selectedId: state.selectedId === textData.id ? null : state.selectedId,
+                });
+            } else {
+                // Redoing an add - add the text node back
+                set({
+                    textNodes: [...state.textNodes, actionToRedo.data],
                     historyStack: [...state.historyStack, actionToRedo],
                     redoStack: newRedoStack,
                 });
@@ -537,6 +661,10 @@ export const useStore = create<CanvasState>((set, get) => ({
 
     // Shape tool - sets active shape and switches to shape tool
     setShape: (shape) => set({ activeShape: shape, currentTool: 'shape' }),
+
+    // Text tool settings
+    setFont: (font) => set({ activeFont: font }),
+    setFontSize: (size) => set({ activeFontSize: Math.max(12, Math.min(72, size)) }),
 
     // Background settings
     setCanvasBackground: (color) => set({ canvasBackground: color }),

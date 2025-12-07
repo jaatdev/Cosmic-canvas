@@ -26,12 +26,13 @@ import {
     Square,
     Triangle,
     MoveRight,
-    Shapes
+    Shapes,
+    Type
 } from 'lucide-react';
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { Pattern } from '@/types';
 
-type ActivePanel = 'none' | 'pen' | 'eraser' | 'bg' | 'zoom' | 'shape';
+type ActivePanel = 'none' | 'pen' | 'eraser' | 'bg' | 'zoom' | 'shape' | 'text';
 
 // Smart Scale: Calculate dimensions to fit viewport
 const calculateSmartScale = (
@@ -103,6 +104,10 @@ export default function Toolbar() {
         resetZoom,
         setIsFullscreen,
         currentPage,
+        activeFont,
+        activeFontSize,
+        setFont,
+        setFontSize,
     } = useStore();
 
     const penColorRef = useRef<HTMLInputElement>(null);
@@ -117,6 +122,7 @@ export default function Toolbar() {
     const isEraser = currentTool === 'eraser';
     const isSelect = currentTool === 'select';
     const isShape = currentTool === 'shape';
+    const isText = currentTool === 'text';
     const canUndoAction = historyStack.length > 0;
     const canRedoAction = redoStack.length > 0;
 
@@ -306,6 +312,15 @@ export default function Toolbar() {
     const handleShapeSelect = (shape: ShapeType) => {
         setShape(shape);
         setActivePanel('none');
+    };
+
+    const handleTextClick = () => {
+        if (isText) {
+            setActivePanel(activePanel === 'text' ? 'none' : 'text');
+        } else {
+            setTool('text');
+            setActivePanel('text');
+        }
     };
 
     // Panel interaction keeps it open
@@ -548,6 +563,61 @@ export default function Toolbar() {
                         </p>
                     </>
                 )}
+
+                {/* Text Panel */}
+                {activePanel === 'text' && (
+                    <>
+                        <div className="flex items-center justify-between mb-3">
+                            <span className="text-xs text-white/60 uppercase tracking-wider font-medium">Text</span>
+                            <button
+                                onClick={() => setActivePanel('none')}
+                                className="p-1 rounded-lg hover:bg-white/10 transition-colors"
+                            >
+                                <X className="w-3 h-3 text-white/40" />
+                            </button>
+                        </div>
+
+                        {/* Font Family */}
+                        <div className="space-y-2 mb-4">
+                            <span className="text-xs text-white/50">Font</span>
+                            <div className="grid grid-cols-3 gap-2">
+                                {[
+                                    { id: 'Inter', label: 'Sans' },
+                                    { id: 'Georgia', label: 'Serif' },
+                                    { id: 'Courier New', label: 'Mono' }
+                                ].map((font) => (
+                                    <button
+                                        key={font.id}
+                                        onClick={() => setFont(font.id)}
+                                        className={`px-2 py-1 rounded-lg text-xs transition-all hover:scale-105 ${activeFont === font.id
+                                            ? 'bg-white/25 ring-2 ring-white/50 text-white'
+                                            : 'bg-white/10 hover:bg-white/15 text-white/60'
+                                            }`}
+                                    >
+                                        {font.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Font Size Slider */}
+                        <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                                <span className="text-xs text-white/50">Size</span>
+                                <span className="text-xs text-white/70 font-mono">{activeFontSize}px</span>
+                            </div>
+                            <input
+                                type="range"
+                                min={12}
+                                max={72}
+                                value={activeFontSize}
+                                onChange={(e) => setFontSize(parseInt(e.target.value))}
+                                className="w-full h-2 rounded-full appearance-none cursor-pointer
+                                    bg-white/20 accent-white"
+                            />
+                        </div>
+                    </>
+                )}
             </div>
         );
     };
@@ -611,6 +681,17 @@ export default function Toolbar() {
                     title="Shapes Tool (S)"
                 >
                     <Shapes className={`w-6 h-6 ${isShape ? 'text-white' : 'text-white/60'}`} />
+                </button>
+
+                <button
+                    onClick={handleTextClick}
+                    className={`relative p-3 rounded-xl transition-all hover:scale-110 ${isText
+                        ? 'bg-white/25 ring-2 ring-white/50'
+                        : 'bg-white/5 hover:bg-white/10'
+                        }`}
+                    title="Text Tool (T)"
+                >
+                    <Type className={`w-6 h-6 ${isText ? 'text-white' : 'text-white/60'}`} />
                 </button>
 
                 <Separator />

@@ -10,6 +10,7 @@ import { Point, Stroke, CanvasImage } from '@/types';
 import { PAGE_HEIGHT } from '@/constants/canvas';
 import BackgroundLayer from './BackgroundLayer';
 import ObjectLayer from './ObjectLayer';
+import TextLayer from './TextLayer';
 
 // perfect-freehand options for gel pen feel
 const getStrokeOptions = (size: number) => ({
@@ -683,6 +684,9 @@ export default function Stage() {
 
                 {/* Z-Index 5: Images */}
                 <ObjectLayer totalHeight={totalHeight} />
+
+                {/* Z-Index 7: Text Nodes */}
+                <TextLayer totalHeight={totalHeight} />
 
                 {/* Z-Index 10: Stroke History + Page Separators */}
                 <canvas

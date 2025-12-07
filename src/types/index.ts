@@ -15,7 +15,7 @@ export interface Stroke {
     isShape?: boolean;  // True for geometric shapes (rendered with lines, not freehand)
 }
 
-export type Tool = 'pen' | 'eraser' | 'select' | 'shape';
+export type Tool = 'pen' | 'eraser' | 'select' | 'shape' | 'text';
 
 export type ShapeType = 'rectangle' | 'circle' | 'triangle' | 'line' | 'arrow';
 
@@ -37,6 +37,16 @@ export interface CanvasImage {
     naturalHeight: number;
 }
 
+export interface TextNode {
+    id: string;
+    x: number;
+    y: number;
+    content: string;
+    fontSize: number;
+    color: string;
+    fontFamily: string;
+}
+
 // Unified timeline action types
 export type PageAction = {
     type: 'page_op';
@@ -49,6 +59,7 @@ export type PageAction = {
 export type ActionItem =
     | { type: 'stroke'; data: Stroke }
     | { type: 'image'; data: CanvasImage }
+    | { type: 'text'; data: TextNode }
     | PageAction;
 
 export interface AppState {
