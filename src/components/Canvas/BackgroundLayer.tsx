@@ -2,98 +2,169 @@
 
 import { useStore } from '@/store/useStore';
 import { Pattern } from '@/types';
-import { useMemo } from 'react';
+import { PAGE_HEIGHT } from '@/constants/canvas';
 
 interface BackgroundLayerProps {
     totalHeight?: number;
 }
 
 /**
- * Get CSS background pattern based on pattern type
+ * Calculate pattern color based on background brightness
  */
-function getPatternCSS(pattern: Pattern, backgroundColor: string): React.CSSProperties {
-    const patternColor = isLightColor(backgroundColor)
-        ? 'rgba(0, 0, 0, 0.08)'
-        : 'rgba(255, 255, 255, 0.08)';
+function getPatternColor(backgroundColor: string): string {
+    const hex = backgroundColor.replace('#', '');
+    const r = parseInt(hex.substr(0, 2), 16);
+    const g = parseInt(hex.substr(2, 2), 16);
+    const b = parseInt(hex.substr(4, 2), 16);
 
-    switch (pattern) {
-        case 'grid':
-            return {
-                backgroundImage: `
-          linear-gradient(${patternColor} 1px, transparent 1px),
-          linear-gradient(90deg, ${patternColor} 1px, transparent 1px)
-        `,
-                backgroundSize: '24px 24px',
-            };
+    // Standard luminance formula
+    const brightness = (r * 299 + g * 587 + b * 114) / 1000;
 
-        case 'dots':
-            return {
-                backgroundImage: `radial-gradient(circle, ${patternColor} 1.5px, transparent 1.5px)`,
-                backgroundSize: '20px 20px',
-            };
-
-        case 'lines':
-            return {
-                backgroundImage: `linear-gradient(${patternColor} 1px, transparent 1px)`,
-                backgroundSize: '100% 28px',
-            };
-
-        case 'none':
-        default:
-            return {};
-    }
+    // Dark background → light lines, Light background → dark lines
+    return brightness < 128
+        ? 'rgba(255,255,255,0.1)'
+        : 'rgba(0,0,0,0.1)';
 }
 
 /**
- * Check if a color is light or dark
- */
-function isLightColor(hex: string): boolean {
-    const color = hex.replace('#', '');
-    const r = parseInt(color.substr(0, 2), 16);
-    const g = parseInt(color.substr(2, 2), 16);
-    const b = parseInt(color.substr(4, 2), 16);
-    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-    return luminance > 0.5;
-}
-
-/**
- * BackgroundLayer Component - Layer 0
+ * BackgroundLayer Component - Z-Index 0
  * 
- * Full-screen background with customizable color and pattern.
- * Sits below the canvas layers.
+ * Full-screen SVG background with vector patterns.
+ * Supports grid, dots, ruled lines, isometric, music staves, and Cornell notes.
  */
 export default function BackgroundLayer({ totalHeight }: BackgroundLayerProps) {
     const { canvasBackground, canvasPattern } = useStore();
-
-    const patternStyles = useMemo(() =>
-        getPatternCSS(canvasPattern, canvasBackground),
-        [canvasPattern, canvasBackground]
-    );
+    const patternColor = getPatternColor(canvasBackground);
 
     return (
-        <div
+        <svg
             style={{
                 position: 'absolute',
                 inset: 0,
                 width: '100%',
                 height: totalHeight || '100%',
-                backgroundColor: canvasBackground,
                 zIndex: 0,
                 pointerEvents: 'none',
             }}
         >
-            {/* Pattern Overlay */}
+            <defs>
+                {/* Grid Pattern - 40px squares */}
+                <pattern
+                    id="grid"
+                    width="40"
+                    height="40"
+                    patternUnits="userSpaceOnUse"
+                >
+                    <path
+                        d="M 40 0 L 0 0 0 40"
+                        fill="none"
+                        stroke={patternColor}
+                        strokeWidth="1"
+                    />
+                </pattern>
+
+                {/* Dot Pattern - 20px spacing */}
+                <pattern
+                    id="dots"
+                    width="20"
+                    height="20"
+                    patternUnits="userSpaceOnUse"
+                >
+                    <circle
+                        cx="10"
+                        cy="10"
+                        r="1.5"
+                        fill={patternColor}
+                    />
+                </pattern>
+
+                {/* Ruled Lines Pattern - 40px spacing */}
+                <pattern
+                    id="lines"
+                    width="100%"
+                    height="40"
+                    patternUnits="userSpaceOnUse"
+                >
+                    <line
+                        x1="0"
+                        y1="40"
+                        x2="100%"
+                        y2="40"
+                        stroke={patternColor}
+                        strokeWidth="1"
+                    />
+                </pattern>
+
+                {/* Isometric Grid Pattern - 60° triangles */}
+                <pattern
+                    id="isometric"
+                    width="86.6"
+                    height="50"
+                    patternUnits="userSpaceOnUse"
+                >
+                    <path
+                        d="M 0 0 L 86.6 50 M 86.6 0 L 0 50 M 43.3 0 L 43.3 50"
+                        fill="none"
+                        stroke={patternColor}
+                        strokeWidth="1"
+                    />
+                </pattern>
+
+                {/* Music Staves Pattern - 5 lines per group, 200px spacing */}
+                <pattern
+                    id="music"
+                    width="100%"
+                    height="200"
+                    patternUnits="userSpaceOnUse"
+                >
+                    {[0, 1, 2, 3, 4].map((i) => (
+                        <line
+                            key={i}
+                            x1="0"
+                            y1={20 + i * 20}
+                            x2="100%"
+                            y2={20 + i * 20}
+                            stroke={patternColor}
+                            strokeWidth="1"
+                        />
+                    ))}
+                </pattern>
+
+                {/* Cornell Notes Pattern - Cue column and summary section per page */}
+                <pattern
+                    id="cornell"
+                    width="100%"
+                    height={PAGE_HEIGHT}
+                    patternUnits="userSpaceOnUse"
+                >
+                    {/* Vertical cue column line at 200px */}
+                    <line
+                        x1="200"
+                        y1="0"
+                        x2="200"
+                        y2={PAGE_HEIGHT}
+                        stroke={patternColor}
+                        strokeWidth="2"
+                    />
+                    {/* Horizontal summary line 200px from bottom */}
+                    <line
+                        x1="0"
+                        y1={PAGE_HEIGHT - 200}
+                        x2="100%"
+                        y2={PAGE_HEIGHT - 200}
+                        stroke={patternColor}
+                        strokeWidth="2"
+                    />
+                </pattern>
+            </defs>
+
+            {/* Background color fill */}
+            <rect width="100%" height="100%" fill={canvasBackground} />
+
+            {/* Pattern overlay */}
             {canvasPattern !== 'none' && (
-                <div
-                    style={{
-                        position: 'absolute',
-                        inset: 0,
-                        width: '100%',
-                        height: '100%',
-                        ...patternStyles,
-                    }}
-                />
+                <rect width="100%" height="100%" fill={`url(#${canvasPattern})`} />
             )}
-        </div>
+        </svg>
     );
 }

@@ -19,7 +19,7 @@ export type Tool = 'pen' | 'eraser' | 'select' | 'shape' | 'text' | 'lasso';
 
 export type ShapeType = 'rectangle' | 'circle' | 'triangle' | 'line' | 'arrow';
 
-export type Pattern = 'none' | 'grid' | 'dots' | 'lines';
+export type Pattern = 'none' | 'grid' | 'dots' | 'lines' | 'isometric' | 'music' | 'cornell';
 
 export interface StrokeConfig {
     color: string;

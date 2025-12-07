@@ -28,7 +28,11 @@ import {
     MoveRight,
     Shapes,
     Type,
-    Lasso
+    Lasso,
+    Box,
+    Music,
+    AlignJustify,
+    Layout
 } from 'lucide-react';
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { Pattern } from '@/types';
@@ -147,7 +151,10 @@ export default function Toolbar() {
         { id: 'none', icon: <X className="w-4 h-4" />, label: 'None' },
         { id: 'grid', icon: <Grid3X3 className="w-4 h-4" />, label: 'Grid' },
         { id: 'dots', icon: <Circle className="w-4 h-4" />, label: 'Dots' },
-        { id: 'lines', icon: <Minus className="w-4 h-4" />, label: 'Lines' },
+        { id: 'lines', icon: <AlignJustify className="w-4 h-4" />, label: 'Ruled' },
+        { id: 'isometric', icon: <Box className="w-4 h-4" />, label: 'Iso' },
+        { id: 'music', icon: <Music className="w-4 h-4" />, label: 'Music' },
+        { id: 'cornell', icon: <Layout className="w-4 h-4" />, label: 'Cornell' },
     ];
 
     // Track fullscreen state (syncs with Esc key exit)
