@@ -34,6 +34,9 @@ interface CanvasState {
     textNodes: TextNode[];
     activeFont: string;
     activeFontSize: number;
+    activeFontWeight: 'normal' | 'bold';
+    activeFontStyle: 'normal' | 'italic';
+    activeTextBackground: string;
     selectedId: string | null; // Unified selection for images and text
 
     // Background
@@ -71,6 +74,9 @@ interface CanvasState {
     setShape: (shape: ShapeType) => void;
     setFont: (font: string) => void;
     setFontSize: (size: number) => void;
+    setFontWeight: (weight: 'normal' | 'bold') => void;
+    setFontStyle: (style: 'normal' | 'italic') => void;
+    setTextBackground: (color: string) => void;
     setCanvasBackground: (color: string) => void;
     setCanvasPattern: (pattern: Pattern) => void;
     clearCanvas: () => void;
@@ -112,6 +118,9 @@ export const useStore = create<CanvasState>((set, get) => ({
     textNodes: [],
     activeFont: 'Inter',
     activeFontSize: 24,
+    activeFontWeight: 'normal',
+    activeFontStyle: 'normal',
+    activeTextBackground: 'transparent',
     selectedId: null,
 
     // Add stroke with unified history
@@ -665,6 +674,9 @@ export const useStore = create<CanvasState>((set, get) => ({
     // Text tool settings
     setFont: (font) => set({ activeFont: font }),
     setFontSize: (size) => set({ activeFontSize: Math.max(12, Math.min(72, size)) }),
+    setFontWeight: (weight) => set({ activeFontWeight: weight }),
+    setFontStyle: (style) => set({ activeFontStyle: style }),
+    setTextBackground: (color) => set({ activeTextBackground: color }),
 
     // Background settings
     setCanvasBackground: (color) => set({ canvasBackground: color }),

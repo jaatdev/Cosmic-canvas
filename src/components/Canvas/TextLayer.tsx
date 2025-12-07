@@ -10,10 +10,21 @@ interface TextLayerProps {
 // Generate unique ID
 const generateId = () => `text-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
+// Font family mapping to CSS variables
+const getFontVariable = (fontFamily: string): string => {
+    const fontMap: Record<string, string> = {
+        'Inter': 'var(--font-sans)',
+        'Playfair Display': 'var(--font-serif)',
+        'Caveat': 'var(--font-hand)',
+        'JetBrains Mono': 'var(--font-mono)',
+    };
+    return fontMap[fontFamily] || fontFamily;
+};
+
 /**
- * TextLayer Component - Editable Text Annotations
+ * TextLayer Component - Editable Text Annotations with Typography Suite
  * 
- * Handles text node creation, editing, and selection.
+ * Handles text node creation, editing, selection, and formatting.
  */
 export default function TextLayer({ totalHeight }: TextLayerProps) {
     const {
@@ -22,6 +33,9 @@ export default function TextLayer({ totalHeight }: TextLayerProps) {
         selectedId,
         activeFont,
         activeFontSize,
+        activeFontWeight,
+        activeFontStyle,
+        activeTextBackground,
         penColor,
         addTextNode,
         updateTextNode,
@@ -67,11 +81,15 @@ export default function TextLayer({ totalHeight }: TextLayerProps) {
             fontSize: activeFontSize,
             color: penColor,
             fontFamily: activeFont,
+            fontWeight: activeFontWeight,
+            fontStyle: activeFontStyle,
+            backgroundColor: activeTextBackground,
+            padding: activeTextBackground !== 'transparent' ? 8 : 0,
         };
 
         addTextNode(newNode);
         setEditingNodeId(newNode.id);
-    }, [isTextMode, zoom, activeFontSize, penColor, activeFont, addTextNode]);
+    }, [isTextMode, zoom, activeFontSize, penColor, activeFont, activeFontWeight, activeFontStyle, activeTextBackground, addTextNode]);
 
     // Handle start dragging
     const handleDragStart = useCallback((e: React.MouseEvent, node: TextNode) => {
@@ -175,6 +193,7 @@ export default function TextLayer({ totalHeight }: TextLayerProps) {
             {textNodes.map((node) => {
                 const isEditing = editingNodeId === node.id;
                 const isSelected = selectedId === node.id && isSelectMode;
+                const hasBackground = node.backgroundColor !== 'transparent';
 
                 return (
                     <div
@@ -187,15 +206,19 @@ export default function TextLayer({ totalHeight }: TextLayerProps) {
                             top: node.y,
                             fontSize: node.fontSize,
                             color: node.color,
-                            fontFamily: node.fontFamily,
+                            fontFamily: getFontVariable(node.fontFamily),
+                            fontWeight: node.fontWeight,
+                            fontStyle: node.fontStyle,
+                            backgroundColor: node.backgroundColor,
+                            padding: hasBackground ? `${node.padding}px` : '4px',
+                            borderRadius: hasBackground ? '8px' : '4px',
+                            boxShadow: hasBackground ? '0 4px 6px rgba(0,0,0,0.1)' : 'none',
                             cursor: isSelectMode ? (isSelected ? 'move' : 'pointer') : 'default',
                             userSelect: isEditing ? 'text' : 'none',
                             whiteSpace: 'pre-wrap',
                             minWidth: '20px',
                             minHeight: node.fontSize + 4,
                             border: isSelected && !isEditing ? '2px dashed #3b82f6' : '2px dashed transparent',
-                            padding: '4px',
-                            borderRadius: '4px',
                             pointerEvents: 'auto',
                         }}
                     >
@@ -219,7 +242,9 @@ export default function TextLayer({ totalHeight }: TextLayerProps) {
                                     all: 'unset',
                                     fontSize: node.fontSize,
                                     color: node.color,
-                                    fontFamily: node.fontFamily,
+                                    fontFamily: getFontVariable(node.fontFamily),
+                                    fontWeight: node.fontWeight,
+                                    fontStyle: node.fontStyle,
                                     width: '100%',
                                     background: 'transparent',
                                 }}

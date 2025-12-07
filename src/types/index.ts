@@ -45,6 +45,10 @@ export interface TextNode {
     fontSize: number;
     color: string;
     fontFamily: string;
+    fontWeight: 'normal' | 'bold';
+    fontStyle: 'normal' | 'italic';
+    backgroundColor: string;
+    padding: number;
 }
 
 // Unified timeline action types

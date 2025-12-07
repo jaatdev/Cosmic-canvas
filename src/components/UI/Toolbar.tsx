@@ -106,8 +106,14 @@ export default function Toolbar() {
         currentPage,
         activeFont,
         activeFontSize,
+        activeFontWeight,
+        activeFontStyle,
+        activeTextBackground,
         setFont,
         setFontSize,
+        setFontWeight,
+        setFontStyle,
+        setTextBackground,
     } = useStore();
 
     const penColorRef = useRef<HTMLInputElement>(null);
@@ -577,24 +583,78 @@ export default function Toolbar() {
                             </button>
                         </div>
 
-                        {/* Font Family */}
+                        {/* Font Family Dropdown */}
                         <div className="space-y-2 mb-4">
                             <span className="text-xs text-white/50">Font</span>
-                            <div className="grid grid-cols-3 gap-2">
+                            <select
+                                value={activeFont}
+                                onChange={(e) => setFont(e.target.value)}
+                                className="w-full px-3 py-2 rounded-lg bg-white/10 border border-white/20 text-white text-sm
+                                    hover:bg-white/15 focus:outline-none focus:ring-2 focus:ring-white/30 transition-all"
+                                style={{ fontFamily: `var(--font-${activeFont === 'Inter' ? 'sans' : activeFont === 'Playfair Display' ? 'serif' : activeFont === 'Caveat' ? 'hand' : 'mono'})` }}
+                            >
+                                <option value="Inter" style={{ fontFamily: 'var(--font-sans)' }}>Sans (Inter)</option>
+                                <option value="Playfair Display" style={{ fontFamily: 'var(--font-serif)' }}>Serif (Playfair)</option>
+                                <option value="Caveat" style={{ fontFamily: 'var(--font-hand)' }}>Hand (Caveat)</option>
+                                <option value="JetBrains Mono" style={{ fontFamily: 'var(--font-mono)' }}>Code (JetBrains)</option>
+                            </select>
+                        </div>
+
+                        {/* Style Toggles (Bold/Italic) */}
+                        <div className="space-y-2 mb-4">
+                            <span className="text-xs text-white/50">Style</span>
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={() => setFontWeight(activeFontWeight === 'normal' ? 'bold' : 'normal')}
+                                    className={`flex-1 px-3 py-2 rounded-lg text-sm font-bold transition-all hover:scale-105 ${activeFontWeight === 'bold'
+                                        ? 'bg-white/25 ring-2 ring-white/50 text-white'
+                                        : 'bg-white/10 hover:bg-white/15 text-white/60'
+                                        }`}
+                                    title="Bold"
+                                >
+                                    B
+                                </button>
+                                <button
+                                    onClick={() => setFontStyle(activeFontStyle === 'normal' ? 'italic' : 'normal')}
+                                    className={`flex-1 px-3 py-2 rounded-lg text-sm italic transition-all hover:scale-105 ${activeFontStyle === 'italic'
+                                        ? 'bg-white/25 ring-2 ring-white/50 text-white'
+                                        : 'bg-white/10 hover:bg-white/15 text-white/60'
+                                        }`}
+                                    title="Italic"
+                                >
+                                    I
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Background (Sticky Notes) */}
+                        <div className="space-y-2 mb-4">
+                            <span className="text-xs text-white/50">Background</span>
+                            <div className="grid grid-cols-5 gap-2">
                                 {[
-                                    { id: 'Inter', label: 'Sans' },
-                                    { id: 'Georgia', label: 'Serif' },
-                                    { id: 'Courier New', label: 'Mono' }
-                                ].map((font) => (
+                                    { color: 'transparent', label: 'None' },
+                                    { color: '#fef3c7', label: 'Yellow' },
+                                    { color: '#fce7f3', label: 'Pink' },
+                                    { color: '#dbeafe', label: 'Blue' },
+                                    { color: '#ffffff', label: 'White' }
+                                ].map((bg) => (
                                     <button
-                                        key={font.id}
-                                        onClick={() => setFont(font.id)}
-                                        className={`px-2 py-1 rounded-lg text-xs transition-all hover:scale-105 ${activeFont === font.id
-                                            ? 'bg-white/25 ring-2 ring-white/50 text-white'
-                                            : 'bg-white/10 hover:bg-white/15 text-white/60'
+                                        key={bg.color}
+                                        onClick={() => setTextBackground(bg.color)}
+                                        className={`p-2 rounded-lg transition-all hover:scale-110 ${activeTextBackground === bg.color
+                                            ? 'ring-2 ring-white/50'
+                                            : 'ring-1 ring-white/20'
                                             }`}
+                                        title={bg.label}
+                                        style={{
+                                            backgroundColor: bg.color,
+                                            border: bg.color === 'transparent' ? '2px dashed rgba(255,255,255,0.3)' : 'none',
+                                            minHeight: '32px',
+                                        }}
                                     >
-                                        {font.label}
+                                        {bg.color === 'transparent' && (
+                                            <X className="w-4 h-4 text-white/40 mx-auto" />
+                                        )}
                                     </button>
                                 ))}
                             </div>
