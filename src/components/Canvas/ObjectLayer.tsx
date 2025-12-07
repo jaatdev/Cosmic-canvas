@@ -1,7 +1,8 @@
 'use client';
 
 import { useStore } from '@/store/useStore';
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
+import { Trash2 } from 'lucide-react';
 
 interface ObjectLayerProps {
     totalHeight?: number;
@@ -25,7 +26,7 @@ type DragState = {
  * When select tool is active, images can be moved and resized.
  */
 export default function ObjectLayer({ totalHeight }: ObjectLayerProps) {
-    const { images, currentTool, selectedImageId, selectImage, updateImage } = useStore();
+    const { images, currentTool, selectedImageId, selectImage, updateImage, deleteSelectedImage } = useStore();
     const [dragState, setDragState] = useState<DragState>({
         type: 'none',
         startX: 0,
@@ -39,12 +40,32 @@ export default function ObjectLayer({ totalHeight }: ObjectLayerProps) {
 
     const isSelectMode = currentTool === 'select';
 
+    // Keyboard listener for Delete/Backspace to delete selected image
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if ((e.key === 'Delete' || e.key === 'Backspace') && selectedImageId) {
+                e.preventDefault();
+                deleteSelectedImage();
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [selectedImageId, deleteSelectedImage]);
+
     // Handle clicking on an image to select it
     const handleImageClick = useCallback((e: React.MouseEvent, imgId: string) => {
         if (!isSelectMode) return;
         e.stopPropagation();
         selectImage(imgId);
     }, [isSelectMode, selectImage]);
+
+    // Handle delete button click
+    const handleDeleteClick = useCallback((e: React.MouseEvent) => {
+        e.stopPropagation();
+        e.preventDefault();
+        deleteSelectedImage();
+    }, [deleteSelectedImage]);
 
     // Start moving an image
     const handleMoveStart = useCallback((e: React.PointerEvent, img: typeof images[0]) => {
@@ -208,10 +229,35 @@ export default function ObjectLayer({ totalHeight }: ObjectLayerProps) {
                         {/* Selection Gizmo */}
                         {isSelected && isSelectMode && (
                             <>
+                                {/* Delete Button - Top Right */}
+                                <button
+                                    onClick={handleDeleteClick}
+                                    style={{
+                                        position: 'absolute',
+                                        top: -12,
+                                        right: -12,
+                                        width: 24,
+                                        height: 24,
+                                        backgroundColor: '#ef4444',
+                                        border: '2px solid white',
+                                        borderRadius: '50%',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        cursor: 'pointer',
+                                        boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                                        zIndex: 10,
+                                    }}
+                                    title="Delete Image (Del)"
+                                >
+                                    <Trash2 size={12} color="white" />
+                                </button>
+
+                                {/* Corner Resize Handles */}
                                 {(['nw', 'ne', 'sw', 'se'] as const).map((handle) => {
                                     const positions: Record<string, React.CSSProperties> = {
                                         nw: { top: -6, left: -6, cursor: 'nwse-resize' },
-                                        ne: { top: -6, right: -6, cursor: 'nesw-resize' },
+                                        ne: { top: -6, right: 20, cursor: 'nesw-resize' },
                                         sw: { bottom: -6, left: -6, cursor: 'nesw-resize' },
                                         se: { bottom: -6, right: -6, cursor: 'nwse-resize' },
                                     };
@@ -240,3 +286,4 @@ export default function ObjectLayer({ totalHeight }: ObjectLayerProps) {
         </div>
     );
 }
+

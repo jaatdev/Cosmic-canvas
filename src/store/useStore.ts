@@ -38,6 +38,7 @@ interface CanvasState {
     addImage: (image: CanvasImage) => void;
     selectImage: (id: string | null) => void;
     updateImage: (id: string, updates: Partial<CanvasImage>) => void;
+    deleteSelectedImage: () => void;
     undo: () => void;
     redo: () => void;
     setTool: (tool: Tool) => void;
@@ -137,6 +138,23 @@ export const useStore = create<CanvasState>((set, get) => ({
         }));
     },
 
+    // Delete selected image (with undo support)
+    deleteSelectedImage: () => {
+        const state = get();
+        if (!state.selectedImageId) return;
+
+        const imageToDelete = state.images.find(img => img.id === state.selectedImageId);
+        if (!imageToDelete) return;
+
+        set({
+            images: state.images.filter(img => img.id !== state.selectedImageId),
+            historyStack: [...state.historyStack, { type: 'image', data: { ...imageToDelete, _deleted: true } as CanvasImage }],
+            redoStack: [],
+            selectedImageId: null,
+            currentTool: 'select',  // Keep user in select mode
+        });
+    },
+
     // Unified undo
     undo: () => {
         const state = get();
@@ -152,12 +170,26 @@ export const useStore = create<CanvasState>((set, get) => ({
                 redoStack: [...state.redoStack, lastAction],
             });
         } else if (lastAction.type === 'image') {
-            set({
-                images: state.images.filter(i => i.id !== lastAction.data.id),
-                historyStack: newHistoryStack,
-                redoStack: [...state.redoStack, lastAction],
-                selectedImageId: state.selectedImageId === lastAction.data.id ? null : state.selectedImageId,
-            });
+            const imageData = lastAction.data as CanvasImage & { _deleted?: boolean };
+
+            if (imageData._deleted) {
+                // Undoing a deletion - restore the image
+                const { _deleted, ...cleanImage } = imageData;
+                set({
+                    images: [...state.images, cleanImage as CanvasImage],
+                    historyStack: newHistoryStack,
+                    redoStack: [...state.redoStack, lastAction],
+                    selectedImageId: cleanImage.id,  // Select the restored image
+                });
+            } else {
+                // Undoing an add - remove the image
+                set({
+                    images: state.images.filter(i => i.id !== lastAction.data.id),
+                    historyStack: newHistoryStack,
+                    redoStack: [...state.redoStack, lastAction],
+                    selectedImageId: state.selectedImageId === lastAction.data.id ? null : state.selectedImageId,
+                });
+            }
         }
     },
 
@@ -176,11 +208,24 @@ export const useStore = create<CanvasState>((set, get) => ({
                 redoStack: newRedoStack,
             });
         } else if (actionToRedo.type === 'image') {
-            set({
-                images: [...state.images, actionToRedo.data],
-                historyStack: [...state.historyStack, actionToRedo],
-                redoStack: newRedoStack,
-            });
+            const imageData = actionToRedo.data as CanvasImage & { _deleted?: boolean };
+
+            if (imageData._deleted) {
+                // Redoing a deletion - remove the image again
+                set({
+                    images: state.images.filter(i => i.id !== imageData.id),
+                    historyStack: [...state.historyStack, actionToRedo],
+                    redoStack: newRedoStack,
+                    selectedImageId: state.selectedImageId === imageData.id ? null : state.selectedImageId,
+                });
+            } else {
+                // Redoing an add - add the image back
+                set({
+                    images: [...state.images, actionToRedo.data],
+                    historyStack: [...state.historyStack, actionToRedo],
+                    redoStack: newRedoStack,
+                });
+            }
         }
     },
 
@@ -243,3 +288,4 @@ export const useStore = create<CanvasState>((set, get) => ({
 }));
 
 export default useStore;
+

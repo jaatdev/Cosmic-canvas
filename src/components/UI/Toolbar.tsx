@@ -217,11 +217,14 @@ export default function Toolbar() {
                     window.innerHeight
                 );
 
+                // Add scroll position so image appears on current page, not always page 1
+                const scrollY = window.scrollY || window.pageYOffset || 0;
+
                 const canvasImage: CanvasImage = {
                     id: generateId(),
                     url: dataUrl,
                     x,
-                    y,
+                    y: scrollY + y,  // Add scroll position to center on current viewport
                     width,
                     height,
                     naturalWidth: img.naturalWidth,
