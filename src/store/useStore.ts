@@ -17,6 +17,7 @@ interface CanvasState {
     selectedImageId: string | null;
     projectName: string;
     pageCount: number;
+    currentPage: number;
     pageHeight: number;
     zoom: number;
     isFullscreen: boolean;
@@ -44,6 +45,10 @@ interface CanvasState {
     setTool: (tool: Tool) => void;
     setProjectName: (name: string) => void;
     addPage: () => void;
+    setCurrentPage: (page: number) => void;
+    insertPageAfter: (pageIndex: number) => void;
+    deletePage: (pageIndex: number) => void;
+    clearPage: (pageIndex: number) => void;
     setPageHeight: (height: number) => void;
     setZoom: (zoom: number) => void;
     zoomIn: () => void;
@@ -74,6 +79,7 @@ export const useStore = create<CanvasState>((set, get) => ({
     selectedImageId: null,
     projectName: 'Untitled Universe',
     pageCount: 1,
+    currentPage: 1,
     pageHeight: 0,
     zoom: 1,
     isFullscreen: false,
@@ -190,6 +196,80 @@ export const useStore = create<CanvasState>((set, get) => ({
                     selectedImageId: state.selectedImageId === lastAction.data.id ? null : state.selectedImageId,
                 });
             }
+        } else if (lastAction.type === 'page_op') {
+            const { operation, pageIndex, deletedStrokes, deletedImages } = lastAction as any; // Cast needed if TS doesn't infer
+
+            if (operation === 'insert') {
+                // Undo insert = Delete the page at index (without pushing to history)
+                // We need to shift everything UP from below the pageIndex
+                const topThreshold = pageIndex * state.pageHeight;
+                const bottomThreshold = (pageIndex + 1) * state.pageHeight;
+
+                // Since it was an insert, there shouldn't be content *on* the page unless user drew on it
+                // But for "undo", we assume we revert to exact state. 
+                // Any content user added to the new page will be lost (or we should shift it? No, undo should strictly reverse).
+                // Actually, if we undo the insert, we merge the content below back up.
+
+                // Simplified Undo Insert: Delete the page and shift up, discard any content on it.
+
+                const newStrokes = state.strokes
+                    .filter(s => !(s.points[0].y >= topThreshold && s.points[0].y < bottomThreshold))
+                    .map(s => {
+                        if (s.points[0].y >= bottomThreshold) {
+                            return { ...s, points: s.points.map(p => ({ ...p, y: p.y - state.pageHeight })) };
+                        }
+                        return s;
+                    });
+
+                const newImages = state.images
+                    .filter(img => !(img.y >= topThreshold && img.y < bottomThreshold))
+                    .map(img => {
+                        if (img.y >= bottomThreshold) {
+                            return { ...img, y: img.y - state.pageHeight };
+                        }
+                        return img;
+                    });
+
+                set({
+                    pageCount: state.pageCount - 1,
+                    strokes: newStrokes,
+                    images: newImages,
+                    historyStack: newHistoryStack,
+                    redoStack: [...state.redoStack, lastAction]
+                });
+
+            } else if (operation === 'delete') {
+                // Undo delete = Insert page at index and restore content
+                const insertThreshold = pageIndex * state.pageHeight; // The top of the deleted page
+
+                // 1. Shift existing content DOWN to make room
+                // existing content at >= insertThreshold needs to move +PAGE_HEIGHT
+                const shiftedStrokes = state.strokes.map(s => {
+                    if (s.points[0].y >= insertThreshold) {
+                        return { ...s, points: s.points.map(p => ({ ...p, y: p.y + state.pageHeight })) };
+                    }
+                    return s;
+                });
+
+                const shiftedImages = state.images.map(img => {
+                    if (img.y >= insertThreshold) {
+                        return { ...img, y: img.y + state.pageHeight };
+                    }
+                    return img;
+                });
+
+                // 2. Restore deleted content
+                // deleted content coordinates are already relative to the page's original position 
+                // (which is now restored). So we just add them back.
+
+                set({
+                    pageCount: state.pageCount + 1,
+                    strokes: [...shiftedStrokes, ...(deletedStrokes || [])],
+                    images: [...shiftedImages, ...(deletedImages || [])],
+                    historyStack: newHistoryStack,
+                    redoStack: [...state.redoStack, lastAction]
+                });
+            }
         }
     },
 
@@ -226,7 +306,198 @@ export const useStore = create<CanvasState>((set, get) => ({
                     redoStack: newRedoStack,
                 });
             }
+        } else if (actionToRedo.type === 'page_op') {
+            // Redo is same as doing the action again
+            const { operation, pageIndex } = actionToRedo as any;
+
+            if (operation === 'insert') {
+                // Redo insert: Call logic similar to insertPageAfter but specific to this action
+                // Reuse insertPageAfter logic but without pushing to history (since we handle stacks manually here)
+                // OR just call insertPageAfter but we need to manage stacks.
+                // Better to duplicate logic for purity.
+
+                const insertThreshold = pageIndex * state.pageHeight; // Note: pageIndex in op is the *new* index
+                // Wait, insertPageAfter(i) creates page at i+1. 
+                // If op.pageIndex is the resulting index, then we shift from there.
+                // Let's assume op.pageIndex is the index of the inserted page.
+
+                const shiftThreshold = actionToRedo.pageIndex * state.pageHeight; // This is the TOP of the inserted page
+
+                const newStrokes = state.strokes.map(s => {
+                    if (s.points[0].y >= shiftThreshold) {
+                        return { ...s, points: s.points.map(p => ({ ...p, y: p.y + state.pageHeight })) };
+                    }
+                    return s;
+                });
+
+                const newImages = state.images.map(img => {
+                    if (img.y >= shiftThreshold) {
+                        return { ...img, y: img.y + state.pageHeight };
+                    }
+                    return img;
+                });
+
+                set({
+                    pageCount: state.pageCount + 1,
+                    strokes: newStrokes,
+                    images: newImages,
+                    historyStack: [...state.historyStack, actionToRedo],
+                    redoStack: newRedoStack
+                });
+
+            } else if (operation === 'delete') {
+                // Redo delete: Delete page at index
+                const topThreshold = pageIndex * state.pageHeight;
+                const bottomThreshold = (pageIndex + 1) * state.pageHeight;
+
+                const newStrokes = state.strokes
+                    .filter(s => !(s.points[0].y >= topThreshold && s.points[0].y < bottomThreshold))
+                    .map(s => {
+                        if (s.points[0].y >= bottomThreshold) {
+                            return { ...s, points: s.points.map(p => ({ ...p, y: p.y - state.pageHeight })) };
+                        }
+                        return s;
+                    });
+
+                const newImages = state.images
+                    .filter(img => !(img.y >= topThreshold && img.y < bottomThreshold))
+                    .map(img => {
+                        if (img.y >= bottomThreshold) {
+                            return { ...img, y: img.y - state.pageHeight };
+                        }
+                        return img;
+                    });
+
+                set({
+                    pageCount: state.pageCount - 1,
+                    strokes: newStrokes,
+                    images: newImages,
+                    historyStack: [...state.historyStack, actionToRedo],
+                    redoStack: newRedoStack
+                });
+            }
         }
+    },
+
+    // Set current page (tracked by scroll)
+    setCurrentPage: (page) => set({ currentPage: page }),
+
+    // Insert a blank page after the specified page index
+    insertPageAfter: (pageIndex) => {
+        const state = get();
+        const insertThreshold = (pageIndex + 1) * state.pageHeight;
+
+        // Shift strokes
+        const newStrokes = state.strokes.map(stroke => {
+            // Check if stroke starts below the threshold
+            if (stroke.points[0].y > insertThreshold) {
+                return {
+                    ...stroke,
+                    points: stroke.points.map(p => ({ ...p, y: p.y + state.pageHeight }))
+                };
+            }
+            return stroke;
+        });
+
+        // Shift images
+        const newImages = state.images.map(img => {
+            if (img.y > insertThreshold) {
+                return { ...img, y: img.y + state.pageHeight };
+            }
+            return img;
+        });
+
+        set({
+            pageCount: state.pageCount + 1,
+            strokes: newStrokes,
+            images: newImages,
+            historyStack: [
+                ...state.historyStack,
+                {
+                    type: 'page_op',
+                    operation: 'insert',
+                    pageIndex: pageIndex + 1
+                }
+            ],
+            redoStack: []
+        });
+    },
+
+    // Delete a specific page and shift content up
+    deletePage: (pageIndex) => {
+        const state = get();
+        if (state.pageCount <= 1) return; // Prevent deleting the last page
+
+        const topThreshold = pageIndex * state.pageHeight;
+        const bottomThreshold = (pageIndex + 1) * state.pageHeight;
+
+        // Find content to delete (centrally located or starting within page)
+        const strokesToDelete = state.strokes.filter(s =>
+            s.points[0].y >= topThreshold && s.points[0].y < bottomThreshold
+        );
+
+        const imagesToDelete = state.images.filter(img =>
+            img.y >= topThreshold && img.y < bottomThreshold
+        );
+
+        // Filter and shift remaining content
+        const newStrokes = state.strokes
+            .filter(s => !(s.points[0].y >= topThreshold && s.points[0].y < bottomThreshold))
+            .map(s => {
+                if (s.points[0].y >= bottomThreshold) {
+                    return {
+                        ...s,
+                        points: s.points.map(p => ({ ...p, y: p.y - state.pageHeight }))
+                    };
+                }
+                return s;
+            });
+
+        const newImages = state.images
+            .filter(img => !(img.y >= topThreshold && img.y < bottomThreshold))
+            .map(img => {
+                if (img.y >= bottomThreshold) {
+                    return { ...img, y: img.y - state.pageHeight };
+                }
+                return img;
+            });
+
+        set({
+            pageCount: state.pageCount - 1,
+            strokes: newStrokes,
+            images: newImages,
+            historyStack: [
+                ...state.historyStack,
+                {
+                    type: 'page_op',
+                    operation: 'delete',
+                    pageIndex,
+                    deletedStrokes: strokesToDelete,
+                    deletedImages: imagesToDelete
+                }
+            ],
+            redoStack: []
+        });
+    },
+
+    // Clear content on a specific page without deleting the page itself
+    clearPage: (pageIndex) => {
+        const state = get();
+        const topThreshold = pageIndex * state.pageHeight;
+        const bottomThreshold = (pageIndex + 1) * state.pageHeight;
+
+        const newStrokes = state.strokes.filter(s =>
+            !(s.points[0].y >= topThreshold && s.points[0].y < bottomThreshold)
+        );
+
+        const newImages = state.images.filter(img =>
+            !(img.y >= topThreshold && img.y < bottomThreshold)
+        );
+
+        // Note: We're not adding this to history yet for simplicity, 
+        // effectively making it "clear canvas" but for just one page. 
+        // To support undo, we'd need a 'clear_page' op or generic batch delete.
+        set({ strokes: newStrokes, images: newImages });
     },
 
     // Set current tool

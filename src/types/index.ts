@@ -38,9 +38,18 @@ export interface CanvasImage {
 }
 
 // Unified timeline action types
+export type PageAction = {
+    type: 'page_op';
+    operation: 'insert' | 'delete';
+    pageIndex: number; // The index where the page was inserted or deleted
+    deletedStrokes?: Stroke[]; // For restoring deleted content
+    deletedImages?: CanvasImage[]; // For restoring deleted content
+};
+
 export type ActionItem =
     | { type: 'stroke'; data: Stroke }
-    | { type: 'image'; data: CanvasImage };
+    | { type: 'image'; data: CanvasImage }
+    | PageAction;
 
 export interface AppState {
     strokes: Stroke[];

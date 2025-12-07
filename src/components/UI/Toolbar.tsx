@@ -22,6 +22,7 @@ import {
     ZoomIn,
     X,
     FilePlus,
+    FileMinus,
     Square,
     Triangle,
     MoveRight,
@@ -92,13 +93,16 @@ export default function Toolbar() {
         setShape,
         addImage,
         addPage,
+        insertPageAfter,
+        deletePage,
         undo,
         redo,
         clearCanvas,
         zoomIn,
         zoomOut,
         resetZoom,
-        setIsFullscreen
+        setIsFullscreen,
+        currentPage,
     } = useStore();
 
     const penColorRef = useRef<HTMLInputElement>(null);
@@ -240,6 +244,18 @@ export default function Toolbar() {
         reader.readAsDataURL(file);
         e.target.value = '';
     }, [addImage]);
+
+    // Delete Page Handler
+    const handleDeletePage = useCallback(() => {
+        if (confirm(`Delete Page ${currentPage}? This cannot be undone.`)) {
+            deletePage(currentPage - 1);
+        }
+    }, [deletePage, currentPage]);
+
+    // Insert Page Handler
+    const handleInsertPage = useCallback(() => {
+        insertPageAfter(currentPage - 1);
+    }, [insertPageAfter, currentPage]);
 
     // Tool handlers
     const handlePenClick = () => {
@@ -625,22 +641,22 @@ export default function Toolbar() {
                 </button>
 
                 <button
-                    onClick={clearCanvas}
+                    onClick={handleDeletePage}
                     className="p-3 rounded-xl bg-white/5 hover:bg-red-500/30 
                         transition-all hover:scale-110"
-                    title="Clear Canvas"
+                    title={`Delete Page ${currentPage}`}
                 >
-                    <Trash2 className="w-6 h-6 text-white/60 hover:text-red-400" />
+                    <FileMinus className="w-6 h-6 text-white/60 hover:text-red-400" />
                 </button>
 
                 <Separator />
 
                 {/* Group 3: Page & Image */}
                 <button
-                    onClick={addPage}
+                    onClick={handleInsertPage}
                     className="p-3 rounded-xl bg-white/5 hover:bg-white/15 
                         transition-all hover:scale-110"
-                    title={`Add Page (${pageCount} Pages)`}
+                    title={`Insert Page After Page ${currentPage}`}
                 >
                     <FilePlus className="w-6 h-6 text-white/60" />
                 </button>

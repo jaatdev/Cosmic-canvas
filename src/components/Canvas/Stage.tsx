@@ -402,6 +402,34 @@ export default function Stage() {
         return () => window.removeEventListener('wheel', handleWheel);
     }, [pageCount]);
 
+    // Track current page on scroll
+    useEffect(() => {
+        let timeoutId: NodeJS.Timeout;
+
+        const handleScroll = () => {
+            if (timeoutId) clearTimeout(timeoutId);
+
+            timeoutId = setTimeout(() => {
+                const scrollY = window.scrollY || window.pageYOffset;
+                // Add half viewport height to determine "dominant" page
+                const centerPoint = scrollY + (window.innerHeight / 2);
+                const currentPage = Math.floor(centerPoint / PAGE_HEIGHT) + 1;
+
+                // Clamp to valid range
+                const validPage = Math.max(1, Math.min(currentPage, pageCount));
+
+                // Only update if changed (though zustand handles this efficiently)
+                useStore.getState().setCurrentPage(validPage);
+            }, 100);
+        };
+
+        window.addEventListener('scroll', handleScroll);
+        return () => {
+            window.removeEventListener('scroll', handleScroll);
+            if (timeoutId) clearTimeout(timeoutId);
+        };
+    }, [pageCount]);
+
     // Keyboard Shortcuts
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
