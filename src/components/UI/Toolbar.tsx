@@ -1,6 +1,6 @@
 'use client';
 
-import { useStore, CanvasImage } from '@/store/useStore';
+import { useStore, CanvasImage, ShapeType } from '@/store/useStore';
 import { exportToPdf } from '@/utils/export';
 import { PAGE_HEIGHT } from '@/constants/canvas';
 import {
@@ -21,12 +21,16 @@ import {
     Download,
     ZoomIn,
     X,
-    FilePlus
+    FilePlus,
+    Square,
+    Triangle,
+    MoveRight,
+    Shapes
 } from 'lucide-react';
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { Pattern } from '@/types';
 
-type ActivePanel = 'none' | 'pen' | 'eraser' | 'bg' | 'zoom';
+type ActivePanel = 'none' | 'pen' | 'eraser' | 'bg' | 'zoom' | 'shape';
 
 // Smart Scale: Calculate dimensions to fit viewport
 const calculateSmartScale = (
@@ -78,12 +82,14 @@ export default function Toolbar() {
         pageCount,
         zoom,
         isFullscreen,
+        activeShape,
         setTool,
         setPenColor,
         setPenWidth,
         setEraserWidth,
         setCanvasBackground,
         setCanvasPattern,
+        setShape,
         addImage,
         addPage,
         undo,
@@ -106,8 +112,18 @@ export default function Toolbar() {
     const isPen = currentTool === 'pen';
     const isEraser = currentTool === 'eraser';
     const isSelect = currentTool === 'select';
+    const isShape = currentTool === 'shape';
     const canUndoAction = historyStack.length > 0;
     const canRedoAction = redoStack.length > 0;
+
+    // Shape definitions for the shapes panel
+    const shapes: { id: ShapeType; icon: React.ReactNode; label: string }[] = [
+        { id: 'rectangle', icon: <Square className="w-5 h-5" />, label: 'Rectangle' },
+        { id: 'circle', icon: <Circle className="w-5 h-5" />, label: 'Circle' },
+        { id: 'triangle', icon: <Triangle className="w-5 h-5" />, label: 'Triangle' },
+        { id: 'line', icon: <Minus className="w-5 h-5" />, label: 'Line' },
+        { id: 'arrow', icon: <MoveRight className="w-5 h-5" />, label: 'Arrow' },
+    ];
 
     const patterns: { id: Pattern; icon: React.ReactNode; label: string }[] = [
         { id: 'none', icon: <X className="w-4 h-4" />, label: 'None' },
@@ -256,6 +272,20 @@ export default function Toolbar() {
 
     const handlePatternSelect = (pattern: Pattern) => {
         setCanvasPattern(pattern);
+        setActivePanel('none');
+    };
+
+    const handleShapeClick = () => {
+        if (isShape) {
+            setActivePanel(activePanel === 'shape' ? 'none' : 'shape');
+        } else {
+            setShape(activeShape); // This sets tool to 'shape'
+            setActivePanel('shape');
+        }
+    };
+
+    const handleShapeSelect = (shape: ShapeType) => {
+        setShape(shape);
         setActivePanel('none');
     };
 
@@ -462,6 +492,43 @@ export default function Toolbar() {
                         </div>
                     </>
                 )}
+
+                {/* Shapes Panel */}
+                {activePanel === 'shape' && (
+                    <>
+                        <div className="flex items-center justify-between mb-3">
+                            <span className="text-xs text-white/60 uppercase tracking-wider font-medium">Shapes</span>
+                            <button
+                                onClick={() => setActivePanel('none')}
+                                className="p-1 rounded-lg hover:bg-white/10 transition-colors"
+                            >
+                                <X className="w-3 h-3 text-white/40" />
+                            </button>
+                        </div>
+
+                        <div className="grid grid-cols-5 gap-2">
+                            {shapes.map((s) => (
+                                <button
+                                    key={s.id}
+                                    onClick={() => handleShapeSelect(s.id)}
+                                    className={`p-3 rounded-lg transition-all hover:scale-110 ${activeShape === s.id
+                                        ? 'bg-white/25 ring-2 ring-white/50'
+                                        : 'bg-white/10 hover:bg-white/15'
+                                        }`}
+                                    title={s.label}
+                                >
+                                    <span className={activeShape === s.id ? 'text-white' : 'text-white/60'}>
+                                        {s.icon}
+                                    </span>
+                                </button>
+                            ))}
+                        </div>
+
+                        <p className="text-xs text-white/40 mt-3 text-center">
+                            Hold Shift for perfect shapes
+                        </p>
+                    </>
+                )}
             </div>
         );
     };
@@ -514,6 +581,17 @@ export default function Toolbar() {
                     title="Select Tool (V)"
                 >
                     <Hand className={`w-6 h-6 ${isSelect ? 'text-white' : 'text-white/60'}`} />
+                </button>
+
+                <button
+                    onClick={handleShapeClick}
+                    className={`relative p-3 rounded-xl transition-all hover:scale-110 ${isShape
+                        ? 'bg-white/25 ring-2 ring-white/50'
+                        : 'bg-white/5 hover:bg-white/10'
+                        }`}
+                    title="Shapes Tool (S)"
+                >
+                    <Shapes className={`w-6 h-6 ${isShape ? 'text-white' : 'text-white/60'}`} />
                 </button>
 
                 <Separator />

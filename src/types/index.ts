@@ -12,9 +12,12 @@ export interface Stroke {
     color: string;
     size: number;
     isEraser: boolean;
+    isShape?: boolean;  // True for geometric shapes (rendered with lines, not freehand)
 }
 
-export type Tool = 'pen' | 'eraser' | 'select';
+export type Tool = 'pen' | 'eraser' | 'select' | 'shape';
+
+export type ShapeType = 'rectangle' | 'circle' | 'triangle' | 'line' | 'arrow';
 
 export type Pattern = 'none' | 'grid' | 'dots' | 'lines';
 

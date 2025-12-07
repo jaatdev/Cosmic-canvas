@@ -4,6 +4,7 @@ import { useRef, useEffect, useState, useCallback } from 'react';
 import { useWindowDimensions } from '@/hooks/useWindowDimensions';
 import getStroke from 'perfect-freehand';
 import { getSvgPathFromStroke } from '@/utils/ink';
+import { getShapePoints } from '@/utils/geometry';
 import { useStore } from '@/store/useStore';
 import { Point, Stroke, CanvasImage } from '@/types';
 import { PAGE_HEIGHT } from '@/constants/canvas';
@@ -79,6 +80,7 @@ export default function Stage() {
         eraserWidth,
         pageCount,
         zoom,
+        activeShape,
         addStroke,
         addImage,
         selectImage,
@@ -90,7 +92,9 @@ export default function Stage() {
     // Local drawing state
     const [isDrawing, setIsDrawing] = useState(false);
     const [isBarrelButtonDown, setIsBarrelButtonDown] = useState(false);
+    const [isShiftHeld, setIsShiftHeld] = useState(false);
     const currentPointsRef = useRef<Point[] | null>(null);
+    const shapeStartRef = useRef<{ x: number; y: number } | null>(null);
 
     // Total canvas height (all pages) - uses FIXED PAGE_HEIGHT
     const totalHeight = PAGE_HEIGHT * pageCount;
@@ -111,7 +115,7 @@ export default function Stage() {
     // Draw a single stroke to a canvas context
     const drawStroke = useCallback((
         ctx: CanvasRenderingContext2D,
-        stroke: Pick<Stroke, 'points' | 'color' | 'size' | 'isEraser'>
+        stroke: Pick<Stroke, 'points' | 'color' | 'size' | 'isEraser'> & { isShape?: boolean }
     ) => {
         if (stroke.points.length < 2) return;
 
@@ -121,6 +125,23 @@ export default function Stage() {
             ctx.globalCompositeOperation = 'source-over';
         }
 
+        // Shape strokes: render with clean geometric lines
+        if (stroke.isShape) {
+            ctx.strokeStyle = stroke.color;
+            ctx.lineWidth = stroke.size;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+
+            ctx.beginPath();
+            ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
+            for (let i = 1; i < stroke.points.length; i++) {
+                ctx.lineTo(stroke.points[i].x, stroke.points[i].y);
+            }
+            ctx.stroke();
+            return;
+        }
+
+        // Freehand strokes: use perfect-freehand for natural feel
         const inputPoints = stroke.points.map(p => [p.x, p.y, p.pressure]);
         const strokeOutline = getStroke(inputPoints, getStrokeOptions(stroke.size));
         const pathData = getSvgPathFromStroke(strokeOutline);
@@ -209,7 +230,7 @@ export default function Stage() {
         drawPageSeparators(ctx);
     }, [width, totalHeight, pixelRatio, strokes, drawStroke, drawPageSeparators]);
 
-    // Render active layer (current stroke only)
+    // Render active layer (current stroke or shape preview)
     // Account for barrel button override for visual feedback
     const renderActiveLayer = useCallback(() => {
         const canvas = activeLayerRef.current;
@@ -231,6 +252,29 @@ export default function Stage() {
         ctx.scale(pixelRatio, pixelRatio);
         ctx.clearRect(0, 0, width, totalHeight);
 
+        // Shape tool rendering - draw geometric shapes with crisp lines
+        if (currentTool === 'shape' && shapeStartRef.current && currentPointsRef.current && currentPointsRef.current.length > 0) {
+            const start = shapeStartRef.current;
+            const end = currentPointsRef.current[currentPointsRef.current.length - 1];
+            const shapePoints = getShapePoints(activeShape, start, end, isShiftHeld);
+
+            if (shapePoints.length >= 2) {
+                ctx.strokeStyle = penColor;
+                ctx.lineWidth = penWidth;
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+
+                ctx.beginPath();
+                ctx.moveTo(shapePoints[0].x, shapePoints[0].y);
+                for (let i = 1; i < shapePoints.length; i++) {
+                    ctx.lineTo(shapePoints[i].x, shapePoints[i].y);
+                }
+                ctx.stroke();
+            }
+            return;
+        }
+
+        // Freehand stroke rendering (pen/eraser)
         const currentPoints = currentPointsRef.current;
         if (currentPoints && currentPoints.length >= 2) {
             // Check barrel button state to override eraser mode
@@ -252,7 +296,7 @@ export default function Stage() {
 
             ctx.globalCompositeOperation = 'source-over';
         }
-    }, [width, totalHeight, pixelRatio, getCurrentStrokeSettings, drawStroke, isBarrelButtonDown, eraserWidth]);
+    }, [width, totalHeight, pixelRatio, getCurrentStrokeSettings, drawStroke, isBarrelButtonDown, eraserWidth, currentTool, activeShape, penColor, penWidth, isShiftHeld]);
 
     // Re-render static layer when stroke history or page count changes
     useEffect(() => {
@@ -396,12 +440,20 @@ export default function Stage() {
         const isSideButton = (e.buttons & 2) === 2;
         setIsBarrelButtonDown(isSideButton);
 
+        // Track Shift key state
+        setIsShiftHeld(e.shiftKey);
+
         // Use pageX/pageY for document-relative coordinates
         // Divide by zoom to get internal canvas coordinates
         const x = e.pageX / zoom;
         const y = e.pageY / zoom;
 
         (e.target as HTMLElement).setPointerCapture(e.pointerId);
+
+        // For shape tool, record start point
+        if (currentTool === 'shape') {
+            shapeStartRef.current = { x, y };
+        }
 
         currentPointsRef.current = [{ x, y, pressure: e.pressure || 0.5 }];
         setIsDrawing(true);
@@ -420,15 +472,25 @@ export default function Stage() {
             setIsBarrelButtonDown(isSideButton);
         }
 
+        // Track Shift key state for shape constraints
+        if (e.shiftKey !== isShiftHeld) {
+            setIsShiftHeld(e.shiftKey);
+        }
+
         // Use pageX/pageY divided by zoom for accurate drawing
         const x = e.pageX / zoom;
         const y = e.pageY / zoom;
 
         if (currentPointsRef.current) {
-            currentPointsRef.current.push({ x, y, pressure: e.pressure || 0.5 });
+            // For shapes, we only need start and current end point
+            if (currentTool === 'shape') {
+                currentPointsRef.current = [currentPointsRef.current[0], { x, y, pressure: e.pressure || 0.5 }];
+            } else {
+                currentPointsRef.current.push({ x, y, pressure: e.pressure || 0.5 });
+            }
             renderActiveLayer();
         }
-    }, [isDrawing, isBarrelButtonDown, renderActiveLayer, zoom]);
+    }, [isDrawing, isBarrelButtonDown, isShiftHeld, renderActiveLayer, zoom, currentTool]);
 
     // Pointer Up - End drawing and save stroke
     // IRON PALM: Strict filtering for pen/mouse only
@@ -438,6 +500,37 @@ export default function Stage() {
 
         (e.target as HTMLElement).releasePointerCapture(e.pointerId);
 
+        // Shape tool: commit shape as stroke points
+        if (currentTool === 'shape' && shapeStartRef.current && currentPointsRef.current && currentPointsRef.current.length > 0) {
+            const start = shapeStartRef.current;
+            const end = currentPointsRef.current[currentPointsRef.current.length - 1];
+            const shapePoints = getShapePoints(activeShape, start, end, e.shiftKey || isShiftHeld);
+
+            if (shapePoints.length >= 2) {
+                addStroke({
+                    points: shapePoints,
+                    color: penColor,
+                    size: penWidth,
+                }, false, true);  // forceEraser=false, isShape=true
+            }
+
+            shapeStartRef.current = null;
+            currentPointsRef.current = null;
+            setIsDrawing(false);
+            setIsShiftHeld(false);
+
+            const canvas = activeLayerRef.current;
+            if (canvas) {
+                const ctx = canvas.getContext('2d');
+                if (ctx) {
+                    ctx.setTransform(1, 0, 0, 1, 0, 0);
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                }
+            }
+            return;
+        }
+
+        // Freehand stroke commit
         const points = currentPointsRef.current;
         if (points && points.length >= 2) {
             // If barrel button was held, force eraser mode for this stroke only
@@ -463,6 +556,7 @@ export default function Stage() {
         currentPointsRef.current = null;
         setIsDrawing(false);
         setIsBarrelButtonDown(false);
+        setIsShiftHeld(false);
 
         const canvas = activeLayerRef.current;
         if (canvas) {
@@ -472,7 +566,7 @@ export default function Stage() {
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
             }
         }
-    }, [addStroke, getCurrentStrokeSettings, isBarrelButtonDown, eraserWidth]);
+    }, [addStroke, getCurrentStrokeSettings, isBarrelButtonDown, eraserWidth, currentTool, activeShape, penColor, penWidth, isShiftHeld]);
 
     // Pointer Leave
     const handlePointerLeave = useCallback((e: React.PointerEvent) => {

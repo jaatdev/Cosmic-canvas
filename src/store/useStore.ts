@@ -1,8 +1,8 @@
 import { create } from 'zustand';
-import { Point, Stroke, Tool, Pattern, CanvasImage, ActionItem } from '@/types';
+import { Point, Stroke, Tool, Pattern, CanvasImage, ActionItem, ShapeType } from '@/types';
 
 // Re-export types for convenience
-export type { Point, Stroke, Tool, Pattern, CanvasImage, ActionItem };
+export type { Point, Stroke, Tool, Pattern, CanvasImage, ActionItem, ShapeType };
 
 // Generate unique ID
 const generateId = () => `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -26,12 +26,15 @@ interface CanvasState {
     penWidth: number;
     eraserWidth: number;
 
+    // Shape tool
+    activeShape: ShapeType;
+
     // Background
     canvasBackground: string;
     canvasPattern: Pattern;
 
     // Actions
-    addStroke: (stroke: Omit<Stroke, 'id' | 'isEraser'>, forceEraser?: boolean) => void;
+    addStroke: (stroke: Omit<Stroke, 'id' | 'isEraser'>, forceEraser?: boolean, isShape?: boolean) => void;
     addImage: (image: CanvasImage) => void;
     selectImage: (id: string | null) => void;
     updateImage: (id: string, updates: Partial<CanvasImage>) => void;
@@ -49,6 +52,7 @@ interface CanvasState {
     setPenColor: (color: string) => void;
     setPenWidth: (width: number) => void;
     setEraserWidth: (width: number) => void;
+    setShape: (shape: ShapeType) => void;
     setCanvasBackground: (color: string) => void;
     setCanvasPattern: (pattern: Pattern) => void;
     clearCanvas: () => void;
@@ -78,12 +82,15 @@ export const useStore = create<CanvasState>((set, get) => ({
     penWidth: 3,             // Finer control
     eraserWidth: 20,
 
+    // Shape tool - default to rectangle
+    activeShape: 'rectangle',
+
     // Background - Dark Slate
     canvasBackground: '#3e3d3d',  // Dark Grey
     canvasPattern: 'none',
 
     // Add stroke with unified history
-    addStroke: (strokeData, forceEraser) => {
+    addStroke: (strokeData, forceEraser, isShape) => {
         const state = get();
         // Use forceEraser if provided (for barrel button), otherwise check current tool
         const isEraser = forceEraser !== undefined ? forceEraser : state.currentTool === 'eraser';
@@ -94,6 +101,7 @@ export const useStore = create<CanvasState>((set, get) => ({
             size: isEraser ? state.eraserWidth : state.penWidth,
             color: isEraser ? '#000000' : state.penColor,
             isEraser,
+            isShape: isShape || false,  // Preserve shape flag for proper rendering
         };
 
         set({
@@ -210,6 +218,9 @@ export const useStore = create<CanvasState>((set, get) => ({
 
     // Eraser settings
     setEraserWidth: (width) => set({ eraserWidth: Math.max(5, Math.min(100, width)) }),
+
+    // Shape tool - sets active shape and switches to shape tool
+    setShape: (shape) => set({ activeShape: shape, currentTool: 'shape' }),
 
     // Background settings
     setCanvasBackground: (color) => set({ canvasBackground: color }),
