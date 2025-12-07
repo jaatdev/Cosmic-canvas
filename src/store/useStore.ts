@@ -39,6 +39,9 @@ interface CanvasState {
     activeTextBackground: string;
     selectedId: string | null; // Unified selection for images and text
 
+    // Lasso selection
+    selectedStrokeIds: string[];
+
     // Background
     canvasBackground: string;
     canvasPattern: Pattern;
@@ -77,6 +80,10 @@ interface CanvasState {
     setFontWeight: (weight: 'normal' | 'bold') => void;
     setFontStyle: (style: 'normal' | 'italic') => void;
     setTextBackground: (color: string) => void;
+    selectStrokes: (ids: string[]) => void;
+    transformStrokes: (dx: number, dy: number, scaleX?: number, scaleY?: number, origin?: { x: number; y: number }) => void;
+    deleteSelectedStrokes: () => void;
+    clearStrokeSelection: () => void;
     setCanvasBackground: (color: string) => void;
     setCanvasPattern: (pattern: Pattern) => void;
     clearCanvas: () => void;
@@ -122,6 +129,9 @@ export const useStore = create<CanvasState>((set, get) => ({
     activeFontStyle: 'normal',
     activeTextBackground: 'transparent',
     selectedId: null,
+
+    // Lasso selection - empty by default
+    selectedStrokeIds: [],
 
     // Add stroke with unified history
     addStroke: (strokeData, forceEraser, isShape) => {
@@ -677,6 +687,67 @@ export const useStore = create<CanvasState>((set, get) => ({
     setFontWeight: (weight) => set({ activeFontWeight: weight }),
     setFontStyle: (style) => set({ activeFontStyle: style }),
     setTextBackground: (color) => set({ activeTextBackground: color }),
+
+    // Lasso selection actions
+    selectStrokes: (ids) => set({ selectedStrokeIds: ids }),
+
+    transformStrokes: (dx, dy, scaleX = 1, scaleY = 1, origin) => {
+        const state = get();
+        if (state.selectedStrokeIds.length === 0) return;
+
+        // If scaling, we need an origin point (center of bbox)
+        let center = origin;
+        if ((scaleX !== 1 || scaleY !== 1) && !center) {
+            // Calculate center from selected strokes
+            const selectedStrokes = state.strokes.filter(s => state.selectedStrokeIds.includes(s.id));
+            const allPoints = selectedStrokes.flatMap(s => s.points);
+            const xs = allPoints.map(p => p.x);
+            const ys = allPoints.map(p => p.y);
+            center = {
+                x: (Math.min(...xs) + Math.max(...xs)) / 2,
+                y: (Math.min(...ys) + Math.max(...ys)) / 2,
+            };
+        }
+
+        set({
+            strokes: state.strokes.map(stroke =>
+                state.selectedStrokeIds.includes(stroke.id)
+                    ? {
+                        ...stroke,
+                        points: stroke.points.map(p => {
+                            // First scale if needed
+                            let newPoint = p;
+                            if (scaleX !== 1 || scaleY !== 1) {
+                                newPoint = {
+                                    x: center!.x + (p.x - center!.x) * scaleX,
+                                    y: center!.y + (p.y - center!.y) * scaleY,
+                                    pressure: p.pressure,
+                                };
+                            }
+                            // Then translate
+                            return {
+                                ...newPoint,
+                                x: newPoint.x + dx,
+                                y: newPoint.y + dy,
+                            };
+                        })
+                    }
+                    : stroke
+            ),
+        });
+    },
+
+    deleteSelectedStrokes: () => {
+        const state = get();
+        if (state.selectedStrokeIds.length === 0) return;
+
+        set({
+            strokes: state.strokes.filter(s => !state.selectedStrokeIds.includes(s.id)),
+            selectedStrokeIds: [],
+        });
+    },
+
+    clearStrokeSelection: () => set({ selectedStrokeIds: [] }),
 
     // Background settings
     setCanvasBackground: (color) => set({ canvasBackground: color }),

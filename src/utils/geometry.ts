@@ -216,3 +216,122 @@ export function getShapePoints(
             return getRect(start, end, isShift);
     }
 }
+
+// ==================== LASSO SELECTION UTILITIES ====================
+
+/**
+ * Bounding Box interface
+ */
+export interface BoundingBox {
+    minX: number;
+    maxX: number;
+    minY: number;
+    maxY: number;
+}
+
+/**
+ * Check if a point is inside a polygon using the ray casting algorithm
+ */
+export function isPointInPolygon(point: Point, polygon: Point[]): boolean {
+    if (polygon.length < 3) return false;
+
+    let inside = false;
+    for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+        const xi = polygon[i].x, yi = polygon[i].y;
+        const xj = polygon[j].x, yj = polygon[j].y;
+
+        const intersect = ((yi > point.y) !== (yj > point.y))
+            && (point.x < (xj - xi) * (point.y - yi) / (yj - yi) + xi);
+        if (intersect) inside = !inside;
+    }
+    return inside;
+}
+
+/**
+ * Get bounding box for a set of points
+ */
+export function getPointsBoundingBox(points: Point[]): BoundingBox {
+    if (points.length === 0) {
+        return { minX: 0, maxX: 0, minY: 0, maxY: 0 };
+    }
+
+    const xs = points.map(p => p.x);
+    const ys = points.map(p => p.y);
+
+    return {
+        minX: Math.min(...xs),
+        maxX: Math.max(...xs),
+        minY: Math.min(...ys),
+        maxY: Math.max(...ys),
+    };
+}
+
+/**
+ * Check if two bounding boxes overlap
+ */
+export function doBBoxesOverlap(bbox1: BoundingBox, bbox2: BoundingBox): boolean {
+    return !(bbox1.maxX < bbox2.minX ||
+        bbox2.maxX < bbox1.minX ||
+        bbox1.maxY < bbox2.minY ||
+        bbox2.maxY < bbox1.minY);
+}
+
+/**
+ * Check if a stroke intersects with a selection polygon
+ * Uses bounding box optimization first, then point-in-polygon test
+ */
+export function doesStrokeIntersectSelection(
+    strokePoints: Point[],
+    selectionPoly: Point[]
+): boolean {
+    if (strokePoints.length === 0 || selectionPoly.length < 3) {
+        return false;
+    }
+
+    // Quick bounding box check first
+    const strokeBBox = getPointsBoundingBox(strokePoints);
+    const polyBBox = getPointsBoundingBox(selectionPoly);
+
+    if (!doBBoxesOverlap(strokeBBox, polyBBox)) {
+        return false;
+    }
+
+    // Check if any stroke point is inside the polygon
+    return strokePoints.some(point => isPointInPolygon(point, selectionPoly));
+}
+
+/**
+ * Get bounding box for multiple strokes
+ */
+export function getStrokesBoundingBox(strokes: Array<{ points: Point[] }>): BoundingBox & { width: number; height: number } {
+    const allPoints = strokes.flatMap(s => s.points);
+    const bbox = getPointsBoundingBox(allPoints);
+
+    return {
+        ...bbox,
+        width: bbox.maxX - bbox.minX,
+        height: bbox.maxY - bbox.minY,
+    };
+}
+
+/**
+ * Check if a point is inside a bounding box
+ */
+export function isPointInBBox(point: Point, bbox: BoundingBox): boolean {
+    return point.x >= bbox.minX &&
+        point.x <= bbox.maxX &&
+        point.y >= bbox.minY &&
+        point.y <= bbox.maxY;
+}
+
+/**
+ * Scale a point relative to a center point
+ * Used for resizing stroke selections
+ */
+export function scalePoint(point: Point, center: Point, scaleX: number, scaleY: number): Point {
+    return {
+        x: center.x + (point.x - center.x) * scaleX,
+        y: center.y + (point.y - center.y) * scaleY,
+        pressure: point.pressure,
+    };
+}

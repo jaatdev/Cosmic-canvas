@@ -15,7 +15,7 @@ export interface Stroke {
     isShape?: boolean;  // True for geometric shapes (rendered with lines, not freehand)
 }
 
-export type Tool = 'pen' | 'eraser' | 'select' | 'shape' | 'text';
+export type Tool = 'pen' | 'eraser' | 'select' | 'shape' | 'text' | 'lasso';
 
 export type ShapeType = 'rectangle' | 'circle' | 'triangle' | 'line' | 'arrow';
 

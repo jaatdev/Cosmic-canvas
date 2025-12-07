@@ -4,7 +4,7 @@ import { useRef, useEffect, useState, useCallback } from 'react';
 import { useWindowDimensions } from '@/hooks/useWindowDimensions';
 import getStroke from 'perfect-freehand';
 import { getSvgPathFromStroke } from '@/utils/ink';
-import { getShapePoints } from '@/utils/geometry';
+import { getShapePoints, doesStrokeIntersectSelection, getStrokesBoundingBox, isPointInBBox } from '@/utils/geometry';
 import { useStore } from '@/store/useStore';
 import { Point, Stroke, CanvasImage } from '@/types';
 import { PAGE_HEIGHT } from '@/constants/canvas';
@@ -82,9 +82,13 @@ export default function Stage() {
         pageCount,
         zoom,
         activeShape,
+        selectedStrokeIds,
         addStroke,
         addImage,
         selectImage,
+        selectStrokes,
+        transformStrokes,
+        clearStrokeSelection,
         setPageHeight,
         undo,
         redo
@@ -96,6 +100,12 @@ export default function Stage() {
     const [isShiftHeld, setIsShiftHeld] = useState(false);
     const currentPointsRef = useRef<Point[] | null>(null);
     const shapeStartRef = useRef<{ x: number; y: number } | null>(null);
+
+    // Lasso selection state
+    const [lassoPoints, setLassoPoints] = useState<Point[]>([]);
+    const [isDraggingSelection, setIsDraggingSelection] = useState(false);
+    const [activeHandle, setActiveHandle] = useState<string | null>(null); // 'tl', 'tr', 'bl', 'br', or null
+    const [dragStart, setDragStart] = useState<{ x: number; y: number; bbox?: { minX: number; minY: number; maxX: number; maxY: number } } | null>(null);
 
     // Total canvas height (all pages) - uses FIXED PAGE_HEIGHT
     const totalHeight = PAGE_HEIGHT * pageCount;
@@ -297,7 +307,57 @@ export default function Stage() {
 
             ctx.globalCompositeOperation = 'source-over';
         }
-    }, [width, totalHeight, pixelRatio, getCurrentStrokeSettings, drawStroke, isBarrelButtonDown, eraserWidth, currentTool, activeShape, penColor, penWidth, isShiftHeld]);
+
+        // Lasso path rendering - dashed line
+        if (currentTool === 'lasso' && lassoPoints.length > 1) {
+            ctx.strokeStyle = '#888888';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([5, 5]);
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+
+            ctx.beginPath();
+            ctx.moveTo(lassoPoints[0].x, lassoPoints[0].y);
+            for (let i = 1; i < lassoPoints.length; i++) {
+                ctx.lineTo(lassoPoints[i].x, lassoPoints[i].y);
+            }
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
+
+        // Selection bounding box rendering
+        if (selectedStrokeIds.length > 0 && currentTool === 'lasso') {
+            const selectedStrokes = strokes.filter(s => selectedStrokeIds.includes(s.id));
+            const bbox = getStrokesBoundingBox(selectedStrokes);
+
+            // Draw bounding box
+            ctx.strokeStyle = '#3b82f6';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([5, 5]);
+            ctx.strokeRect(bbox.minX, bbox.minY, bbox.width, bbox.height);
+            ctx.setLineDash([]);
+
+            // Draw corner handles
+            const handleSize = 8;
+            const handles = [
+                { x: bbox.minX, y: bbox.minY }, // Top-left
+                { x: bbox.maxX, y: bbox.minY }, // Top-right
+                { x: bbox.minX, y: bbox.maxY }, // Bottom-left
+                { x: bbox.maxX, y: bbox.maxY }, // Bottom-right
+            ];
+
+            ctx.fillStyle = '#ffffff';
+            ctx.strokeStyle = '#3b82f6';
+            ctx.lineWidth = 2;
+
+            handles.forEach(handle => {
+                ctx.beginPath();
+                ctx.arc(handle.x, handle.y, handleSize, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+            });
+        }
+    }, [width, totalHeight, pixelRatio, getCurrentStrokeSettings, drawStroke, isBarrelButtonDown, eraserWidth, currentTool, activeShape, penColor, penWidth, isShiftHeld, lassoPoints, selectedStrokeIds, strokes]);
 
     // Re-render static layer when stroke history or page count changes
     useEffect(() => {
@@ -458,9 +518,57 @@ export default function Stage() {
         // Strict palm rejection: only allow 'pen' or 'mouse', reject 'touch'
         if (e.pointerType !== 'pen' && e.pointerType !== 'mouse') return;
 
+        const x = e.pageX / zoom;
+        const y = e.pageY / zoom;
+
+        // Lasso mode: Check for handle or bbox interaction
+        if (currentTool === 'lasso' && selectedStrokeIds.length > 0) {
+            const selectedStrokes = strokes.filter(s => selectedStrokeIds.includes(s.id));
+            const bbox = getStrokesBoundingBox(selectedStrokes);
+
+            // Check if clicking on a resize handle (8px radius)
+            const handleSize = 8;
+            const handles = [
+                { id: 'tl', x: bbox.minX, y: bbox.minY },
+                { id: 'tr', x: bbox.maxX, y: bbox.minY },
+                { id: 'bl', x: bbox.minX, y: bbox.maxY },
+                { id: 'br', x: bbox.maxX, y: bbox.maxY },
+            ];
+
+            for (const handle of handles) {
+                const dist = Math.sqrt((x - handle.x) ** 2 + (y - handle.y) ** 2);
+                if (dist <= handleSize) {
+                    // Start resizing from this handle
+                    setActiveHandle(handle.id);
+                    setDragStart({ x, y, bbox });
+                    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+                    return;
+                }
+            }
+
+            if (isPointInBBox({ x, y, pressure: 0.5 }, bbox)) {
+                // Start dragging selection
+                setIsDraggingSelection(true);
+                setDragStart({ x, y });
+                (e.target as HTMLElement).setPointerCapture(e.pointerId);
+                return;
+            } else {
+                // Clicked outside - commit and clear selection
+                clearStrokeSelection();
+            }
+        }
+
         // In select mode, clicking empty canvas deselects image
         if (currentTool === 'select') {
             selectImage(null);
+            return;
+        }
+
+        // Lasso mode: Start drawing lasso loop
+        if (currentTool === 'lasso') {
+            setLassoPoints([{ x, y, pressure: 0.5 }]);
+            setIsDrawing(true);
+            (e.target as HTMLElement).setPointerCapture(e.pointerId);
             return;
         }
 
@@ -472,11 +580,6 @@ export default function Stage() {
         // Track Shift key state
         setIsShiftHeld(e.shiftKey);
 
-        // Use pageX/pageY for document-relative coordinates
-        // Divide by zoom to get internal canvas coordinates
-        const x = e.pageX / zoom;
-        const y = e.pageY / zoom;
-
         (e.target as HTMLElement).setPointerCapture(e.pointerId);
 
         // For shape tool, record start point
@@ -486,14 +589,100 @@ export default function Stage() {
 
         currentPointsRef.current = [{ x, y, pressure: e.pressure || 0.5 }];
         setIsDrawing(true);
-    }, [currentTool, selectImage, zoom]);
+    }, [currentTool, selectImage, zoom, selectedStrokeIds, strokes, clearStrokeSelection]);
 
     // Pointer Move - Continue drawing
     // IRON PALM: Strict filtering for pen/mouse only
     const handlePointerMove = useCallback((e: React.PointerEvent) => {
-        if (!isDrawing) return;
         // Strict palm rejection: only allow 'pen' or 'mouse', reject 'touch'
         if (e.pointerType !== 'pen' && e.pointerType !== 'mouse') return;
+
+        const x = e.pageX / zoom;
+        const y = e.pageY / zoom;
+
+        // Handle resizing via corner handles
+        if (activeHandle && dragStart && dragStart.bbox) {
+            const originalBbox = dragStart.bbox;
+            let newBbox = { ...originalBbox };
+
+            // Update bbox based on which handle is being dragged
+            switch (activeHandle) {
+                case 'tl': // Top-left
+                    newBbox.minX = x;
+                    newBbox.minY = y;
+                    break;
+                case 'tr': // Top-right
+                    newBbox.maxX = x;
+                    newBbox.minY = y;
+                    break;
+                case 'bl': // Bottom-left
+                    newBbox.minX = x;
+                    newBbox.maxY = y;
+                    break;
+                case 'br': // Bottom-right
+                    newBbox.maxX = x;
+                    newBbox.maxY = y;
+                    break;
+            }
+
+            // Calculate scale factors
+            const scaleX = (newBbox.maxX - newBbox.minX) / (originalBbox.maxX - originalBbox.minX);
+            const scaleY = (newBbox.maxY - newBbox.minY) / (originalBbox.maxY - originalBbox.minY);
+
+            // Calculate translation (movement of the opposite corner)
+            let dx = 0, dy = 0;
+            switch (activeHandle) {
+                case 'tl': // Top-left: opposite is bottom-right
+                    dx = newBbox.minX - originalBbox.minX;
+                    dy = newBbox.minY - originalBbox.minY;
+                    break;
+                case 'tr': // Top-right: opposite is bottom-left
+                    dx = newBbox.maxX - originalBbox.maxX;
+                    dy = newBbox.minY - originalBbox.minY;
+                    break;
+                case 'bl': // Bottom-left: opposite is top-right
+                    dx = newBbox.minX - originalBbox.minX;
+                    dy = newBbox.maxY - originalBbox.maxY;
+                    break;
+                case 'br': // Bottom-right: opposite is top-left
+                    dx = newBbox.maxX - originalBbox.maxX;
+                    dy = newBbox.maxY - originalBbox.maxY;
+                    break;
+            }
+
+            // Determine the origin point (opposite corner from the handle)
+            let origin = { x: 0, y: 0 };
+            switch (activeHandle) {
+                case 'tl': origin = { x: originalBbox.maxX, y: originalBbox.maxY }; break;
+                case 'tr': origin = { x: originalBbox.minX, y: originalBbox.maxY }; break;
+                case 'bl': origin = { x: originalBbox.maxX, y: originalBbox.minY }; break;
+                case 'br': origin = { x: originalBbox.minX, y: originalBbox.minY }; break;
+            }
+
+            // Apply transformation
+            transformStrokes(0, 0, scaleX, scaleY, origin);
+            setDragStart({ ...dragStart, bbox: newBbox });
+            renderActiveLayer();
+            return;
+        }
+
+        // Handle dragging selected strokes
+        if (isDraggingSelection && dragStart) {
+            const dx = x - dragStart.x;
+            const dy = y - dragStart.y;
+            transformStrokes(dx, dy);
+            setDragStart({ x, y });
+            return;
+        }
+
+        // Handle lasso drawing
+        if (currentTool === 'lasso' && isDrawing) {
+            setLassoPoints(prev => [...prev, { x, y, pressure: 0.5 }]);
+            renderActiveLayer();
+            return;
+        }
+
+        if (!isDrawing) return;
 
         // Continue tracking barrel button state during stroke
         const isSideButton = (e.buttons & 2) === 2;
@@ -506,10 +695,6 @@ export default function Stage() {
             setIsShiftHeld(e.shiftKey);
         }
 
-        // Use pageX/pageY divided by zoom for accurate drawing
-        const x = e.pageX / zoom;
-        const y = e.pageY / zoom;
-
         if (currentPointsRef.current) {
             // For shapes, we only need start and current end point
             if (currentTool === 'shape') {
@@ -519,7 +704,7 @@ export default function Stage() {
             }
             renderActiveLayer();
         }
-    }, [isDrawing, isBarrelButtonDown, isShiftHeld, renderActiveLayer, zoom, currentTool]);
+    }, [isDrawing, isBarrelButtonDown, isShiftHeld, renderActiveLayer, zoom, currentTool, isDraggingSelection, dragStart, transformStrokes, activeHandle]);
 
     // Pointer Up - End drawing and save stroke
     // IRON PALM: Strict filtering for pen/mouse only
@@ -528,6 +713,40 @@ export default function Stage() {
         if (e.pointerType !== 'pen' && e.pointerType !== 'mouse') return;
 
         (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+
+        // Handle end of selection drag or resize
+        if (isDraggingSelection || activeHandle) {
+            setIsDraggingSelection(false);
+            setActiveHandle(null);
+            setDragStart(null);
+            return;
+        }
+
+        // Lasso tool: Process selection
+        if (currentTool === 'lasso' && lassoPoints.length > 2) {
+            // Close the loop
+            const closedLoop = [...lassoPoints, lassoPoints[0]];
+
+            // Find strokes that intersect with the lasso
+            const selectedIds = strokes
+                .filter(stroke => doesStrokeIntersectSelection(stroke.points, closedLoop))
+                .map(s => s.id);
+
+            selectStrokes(selectedIds);
+            setLassoPoints([]);
+            setIsDrawing(false);
+
+            // Clear active layer
+            const canvas = activeLayerRef.current;
+            if (canvas) {
+                const ctx = canvas.getContext('2d');
+                if (ctx) {
+                    ctx.setTransform(1, 0, 0, 1, 0, 0);
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                }
+            }
+            return;
+        }
 
         // Shape tool: commit shape as stroke points
         if (currentTool === 'shape' && shapeStartRef.current && currentPointsRef.current && currentPointsRef.current.length > 0) {
@@ -595,7 +814,7 @@ export default function Stage() {
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
             }
         }
-    }, [addStroke, getCurrentStrokeSettings, isBarrelButtonDown, eraserWidth, currentTool, activeShape, penColor, penWidth, isShiftHeld]);
+    }, [addStroke, getCurrentStrokeSettings, isBarrelButtonDown, eraserWidth, currentTool, activeShape, penColor, penWidth, isShiftHeld, isDraggingSelection, lassoPoints, strokes, selectStrokes]);
 
     // Pointer Leave
     const handlePointerLeave = useCallback((e: React.PointerEvent) => {

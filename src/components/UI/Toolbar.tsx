@@ -27,7 +27,8 @@ import {
     Triangle,
     MoveRight,
     Shapes,
-    Type
+    Type,
+    Lasso
 } from 'lucide-react';
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { Pattern } from '@/types';
@@ -129,6 +130,7 @@ export default function Toolbar() {
     const isSelect = currentTool === 'select';
     const isShape = currentTool === 'shape';
     const isText = currentTool === 'text';
+    const isLasso = currentTool === 'lasso';
     const canUndoAction = historyStack.length > 0;
     const canRedoAction = redoStack.length > 0;
 
@@ -327,6 +329,11 @@ export default function Toolbar() {
             setTool('text');
             setActivePanel('text');
         }
+    };
+
+    const handleLassoClick = () => {
+        setTool('lasso');
+        setActivePanel('none');
     };
 
     // Panel interaction keeps it open
@@ -752,6 +759,17 @@ export default function Toolbar() {
                     title="Text Tool (T)"
                 >
                     <Type className={`w-6 h-6 ${isText ? 'text-white' : 'text-white/60'}`} />
+                </button>
+
+                <button
+                    onClick={handleLassoClick}
+                    className={`relative p-3 rounded-xl transition-all hover:scale-110 ${isLasso
+                        ? 'bg-white/25 ring-2 ring-white/50'
+                        : 'bg-white/5 hover:bg-white/10'
+                        }`}
+                    title="Lasso Tool (L)"
+                >
+                    <Lasso className={`w-6 h-6 ${isLasso ? 'text-white' : 'text-white/60'}`} />
                 </button>
 
                 <Separator />
