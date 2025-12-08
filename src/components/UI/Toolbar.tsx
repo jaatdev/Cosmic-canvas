@@ -2,7 +2,7 @@
 
 import { useStore, CanvasImage, ShapeType } from '@/store/useStore';
 import { exportToPdf } from '@/utils/export';
-import { PAGE_HEIGHT } from '@/constants/canvas';
+import { PAGE_HEIGHT, PAGE_WIDTH } from '@/constants/canvas';
 import {
     Pencil,
     Eraser,
@@ -228,7 +228,7 @@ export default function Toolbar() {
         }
     }, [isExporting, strokes, images, pageCount, canvasBackground, canvasPattern, projectName]);
 
-    // Image upload handler
+    // Image upload handler - centers on current page
     const handleImageUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
@@ -241,21 +241,33 @@ export default function Toolbar() {
             const img = new Image();
 
             img.onload = () => {
-                const { width, height, x, y } = calculateSmartScale(
-                    img.naturalWidth,
-                    img.naturalHeight,
-                    window.innerWidth,
-                    window.innerHeight
-                );
+                // Smart scaling
+                const aspectRatio = img.naturalWidth / img.naturalHeight;
+                const maxWidth = Math.min(600, PAGE_WIDTH * 0.8);
+                const maxHeight = PAGE_HEIGHT * 0.6;
 
-                // Add scroll position so image appears on current page, not always page 1
-                const scrollY = window.scrollY || window.pageYOffset || 0;
+                let width = maxWidth;
+                let height = width / aspectRatio;
+
+                if (height > maxHeight) {
+                    height = maxHeight;
+                    width = height * aspectRatio;
+                }
+
+                // Page-relative positioning: center on current page
+                // X: Center of A4 paper width
+                const x = (PAGE_WIDTH / 2) - (width / 2);
+
+                // Y: Center of the current page
+                // currentPage is 1-based (1, 2, 3...)
+                const pageTopY = (currentPage - 1) * PAGE_HEIGHT;
+                const y = pageTopY + (PAGE_HEIGHT / 2) - (height / 2);
 
                 const canvasImage: CanvasImage = {
                     id: generateId(),
                     url: dataUrl,
                     x,
-                    y: scrollY + y,  // Add scroll position to center on current viewport
+                    y,
                     width,
                     height,
                     naturalWidth: img.naturalWidth,
@@ -270,7 +282,7 @@ export default function Toolbar() {
 
         reader.readAsDataURL(file);
         e.target.value = '';
-    }, [addImage]);
+    }, [addImage, currentPage]);
 
     // Delete Page Handler
     const handleDeletePage = useCallback(() => {

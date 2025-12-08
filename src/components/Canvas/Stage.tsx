@@ -4,7 +4,7 @@ import { useRef, useEffect, useState, useCallback } from 'react';
 import { useWindowDimensions } from '@/hooks/useWindowDimensions';
 import getStroke from 'perfect-freehand';
 import { getSvgPathFromStroke } from '@/utils/ink';
-import { getShapePoints, doesStrokeIntersectSelection, getStrokesBoundingBox, isPointInBBox } from '@/utils/geometry';
+import { getShapePoints, doesStrokeIntersectSelection, doesTextIntersectSelection, getStrokesBoundingBox, isPointInBBox } from '@/utils/geometry';
 import { useStore } from '@/store/useStore';
 import { Point, Stroke, CanvasImage } from '@/types';
 import { PAGE_HEIGHT, PAGE_WIDTH } from '@/constants/canvas';
@@ -84,6 +84,7 @@ export default function Stage() {
         penWidth,
         eraserWidth,
         pageCount,
+        currentPage,
         zoom,
         activeShape,
         selectedStrokeIds,
@@ -96,6 +97,8 @@ export default function Stage() {
         addImage,
         selectImage,
         selectStrokes,
+        selectText,
+        clearSelection,
         transformStrokes,
         clearStrokeSelection,
         setPageHeight,
@@ -427,22 +430,33 @@ export default function Stage() {
         renderStaticLayer();
     }, [strokes, pageCount, renderStaticLayer]);
 
-    // Process image blob and add to canvas with smart scaling
+    // Process image blob and add to canvas - centers on current page
     const processImageBlob = useCallback((blob: Blob) => {
         const url = URL.createObjectURL(blob);
         const img = new Image();
 
         img.onload = () => {
-            // Get current scroll position for centering
-            const scrollY = window.scrollY || window.pageYOffset || 0;
+            // Calculate smart scale dimensions
+            const maxWidth = Math.min(600, PAGE_WIDTH * 0.8);
+            const maxHeight = PAGE_HEIGHT * 0.6;
+            const aspectRatio = img.naturalWidth / img.naturalHeight;
 
-            const { width: scaledWidth, height: scaledHeight, x, y } = calculateSmartScale(
-                img.naturalWidth,
-                img.naturalHeight,
-                width,
-                height,
-                scrollY
-            );
+            let scaledWidth = maxWidth;
+            let scaledHeight = scaledWidth / aspectRatio;
+
+            if (scaledHeight > maxHeight) {
+                scaledHeight = maxHeight;
+                scaledWidth = scaledHeight * aspectRatio;
+            }
+
+            // Page-relative positioning: center on current page
+            // X: Center of A4 paper width
+            const x = (PAGE_WIDTH / 2) - (scaledWidth / 2);
+
+            // Y: Center of the current page
+            // currentPage is 1-based (1, 2, 3...)
+            const pageTopY = (currentPage - 1) * PAGE_HEIGHT;
+            const y = pageTopY + (PAGE_HEIGHT / 2) - (scaledHeight / 2);
 
             const canvasImage: CanvasImage = {
                 id: generateId(),
@@ -459,7 +473,7 @@ export default function Stage() {
         };
 
         img.src = url;
-    }, [addImage, width, height]);
+    }, [addImage, currentPage]);
 
     // Paste event handler
     useEffect(() => {
@@ -797,11 +811,17 @@ export default function Stage() {
             const closedLoop = [...lassoPoints, lassoPoints[0]];
 
             // Find strokes that intersect with the lasso
-            const selectedIds = strokes
+            const selectedStrokeIds = strokes
                 .filter(stroke => doesStrokeIntersectSelection(stroke.points, closedLoop))
                 .map(s => s.id);
 
-            selectStrokes(selectedIds);
+            // Find text nodes that intersect with the lasso
+            const selectedTextIds = textNodes
+                .filter(node => doesTextIntersectSelection(node, closedLoop))
+                .map(t => t.id);
+
+            selectStrokes(selectedStrokeIds);
+            selectText(selectedTextIds);
             setLassoPoints([]);
             setIsDrawing(false);
 

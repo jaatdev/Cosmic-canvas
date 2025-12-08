@@ -122,6 +122,12 @@ const drawStroke = (
 ) => {
     if (stroke.points.length < 2) return;
 
+    // Set transparency for highlighters
+    const wasHighlighter = stroke.isHighlighter;
+    if (wasHighlighter) {
+        ctx.globalAlpha = 0.4; // Slightly more transparent than on-screen for better print result
+    }
+
     if (stroke.isEraser) {
         ctx.globalCompositeOperation = 'destination-out';
     } else {
@@ -132,7 +138,7 @@ const drawStroke = (
     if (stroke.isShape) {
         ctx.strokeStyle = stroke.color;
         ctx.lineWidth = stroke.size;
-        ctx.lineCap = 'round';
+        ctx.lineCap = wasHighlighter ? 'butt' : 'round';
         ctx.lineJoin = 'round';
         ctx.beginPath();
         ctx.moveTo(stroke.points[0].x, stroke.points[0].y - offsetY);
@@ -140,6 +146,27 @@ const drawStroke = (
             ctx.lineTo(stroke.points[i].x, stroke.points[i].y - offsetY);
         }
         ctx.stroke();
+        if (wasHighlighter) {
+            ctx.globalAlpha = 1.0;
+            ctx.lineCap = 'round';
+        }
+        return;
+    }
+
+    // Highlighter strokes: use simple line drawing for chisel tip feel
+    if (wasHighlighter) {
+        ctx.strokeStyle = stroke.color;
+        ctx.lineWidth = stroke.size;
+        ctx.lineCap = 'butt';
+        ctx.lineJoin = 'round';
+        ctx.beginPath();
+        ctx.moveTo(stroke.points[0].x, stroke.points[0].y - offsetY);
+        for (let i = 1; i < stroke.points.length; i++) {
+            ctx.lineTo(stroke.points[i].x, stroke.points[i].y - offsetY);
+        }
+        ctx.stroke();
+        ctx.globalAlpha = 1.0;
+        ctx.lineCap = 'round';
         return;
     }
 

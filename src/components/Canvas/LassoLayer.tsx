@@ -24,12 +24,14 @@ export default function LassoLayer({ totalHeight }: LassoLayerProps) {
         currentTool,
         zoom,
         strokes,
+        textNodes,
         selectedStrokeIds,
+        selectedTextIds,
         transformStrokes,
         scaleSelectedStrokes,
         duplicateSelectedStrokes,
         deleteSelectedStrokes,
-        clearStrokeSelection,
+        clearSelection,
     } = useStore();
 
     // Drag state - ALL hooks must be called before any conditional returns
@@ -38,22 +40,73 @@ export default function LassoLayer({ totalHeight }: LassoLayerProps) {
     const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
     const [initialBbox, setInitialBbox] = useState<{ minX: number; minY: number; maxX: number; maxY: number } | null>(null);
 
-    // Calculate bounding box (memoized)
+    // Calculate bounding box from strokes (memoized)
     const selectedStrokes = useMemo(() =>
         strokes.filter(s => selectedStrokeIds.includes(s.id)),
         [strokes, selectedStrokeIds]
     );
 
-    const bbox = useMemo(() =>
-        selectedStrokes.length > 0 ? getStrokesBoundingBox(selectedStrokes) : null,
-        [selectedStrokes]
+    // Calculate bounding box from text nodes (memoized)
+    const selectedTexts = useMemo(() =>
+        textNodes.filter(t => selectedTextIds.includes(t.id)),
+        [textNodes, selectedTextIds]
     );
+
+    // Combined bounding box for strokes AND text
+    const bbox = useMemo(() => {
+        const hasStrokes = selectedStrokes.length > 0;
+        const hasText = selectedTexts.length > 0;
+
+        if (!hasStrokes && !hasText) return null;
+
+        // Get stroke bounds
+        const strokeBbox = hasStrokes ? getStrokesBoundingBox(selectedStrokes) : null;
+
+        // Get text bounds
+        let textMinX = Infinity, textMaxX = -Infinity;
+        let textMinY = Infinity, textMaxY = -Infinity;
+
+        if (hasText) {
+            selectedTexts.forEach(t => {
+                const width = t.content.length * (t.fontSize * 0.6);
+                const height = t.fontSize * 1.2;
+                textMinX = Math.min(textMinX, t.x);
+                textMaxX = Math.max(textMaxX, t.x + width);
+                textMinY = Math.min(textMinY, t.y);
+                textMaxY = Math.max(textMaxY, t.y + height);
+            });
+        }
+
+        // Combine bounds
+        if (hasStrokes && hasText) {
+            return {
+                minX: Math.min(strokeBbox!.minX, textMinX),
+                maxX: Math.max(strokeBbox!.maxX, textMaxX),
+                minY: Math.min(strokeBbox!.minY, textMinY),
+                maxY: Math.max(strokeBbox!.maxY, textMaxY),
+                width: 0,
+                height: 0,
+            };
+        } else if (hasStrokes) {
+            return strokeBbox;
+        } else {
+            return {
+                minX: textMinX,
+                maxX: textMaxX,
+                minY: textMinY,
+                maxY: textMaxY,
+                width: textMaxX - textMinX,
+                height: textMaxY - textMinY,
+            };
+        }
+    }, [selectedStrokes, selectedTexts]);
 
     // Keyboard navigation - Hook called unconditionally
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             // Only handle if we have selection and are in lasso mode
-            if (selectedStrokeIds.length === 0 || currentTool !== 'lasso') return;
+            const hasSelection = selectedStrokeIds.length > 0 || selectedTextIds.length > 0;
+            if (!hasSelection || currentTool !== 'lasso') return;
 
             const moveAmount = 10;
             let dx = 0, dy = 0;
@@ -69,7 +122,7 @@ export default function LassoLayer({ totalHeight }: LassoLayerProps) {
                     deleteSelectedStrokes();
                     return;
                 case 'Escape':
-                    clearStrokeSelection();
+                    clearSelection();
                     return;
                 default:
                     return;
@@ -83,10 +136,11 @@ export default function LassoLayer({ totalHeight }: LassoLayerProps) {
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [selectedStrokeIds, currentTool, transformStrokes, deleteSelectedStrokes, clearStrokeSelection]);
+    }, [selectedStrokeIds, selectedTextIds, currentTool, transformStrokes, deleteSelectedStrokes, clearSelection]);
 
     // Don't render if not in lasso mode or no selection - AFTER all hooks
-    if (currentTool !== 'lasso' || selectedStrokeIds.length === 0 || !bbox) {
+    const hasSelection = selectedStrokeIds.length > 0 || selectedTextIds.length > 0;
+    if (currentTool !== 'lasso' || !hasSelection || !bbox) {
         return null;
     }
 

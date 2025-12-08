@@ -335,3 +335,62 @@ export function scalePoint(point: Point, center: Point, scaleX: number, scaleY: 
         pressure: point.pressure,
     };
 }
+
+/**
+ * Check if a text node intersects with a selection polygon
+ * Estimates text bounds and checks if the rectangle overlaps with the lasso
+ */
+export interface TextNodeBounds {
+    id: string;
+    x: number;
+    y: number;
+    content: string;
+    fontSize: number;
+}
+
+export function doesTextIntersectSelection(
+    textNode: TextNodeBounds,
+    selectionPoly: Point[]
+): boolean {
+    if (selectionPoly.length < 3) return false;
+
+    // Estimate text dimensions
+    const width = textNode.content.length * (textNode.fontSize * 0.6);
+    const height = textNode.fontSize * 1.2;
+
+    // Text node bounding box
+    const textBBox: BoundingBox = {
+        minX: textNode.x,
+        maxX: textNode.x + width,
+        minY: textNode.y,
+        maxY: textNode.y + height,
+    };
+
+    // Quick bounding box check
+    const polyBBox = getPointsBoundingBox(selectionPoly);
+    if (!doBBoxesOverlap(textBBox, polyBBox)) {
+        return false;
+    }
+
+    // Check if any corner of the text box is inside the polygon
+    const corners: Point[] = [
+        { x: textBBox.minX, y: textBBox.minY, pressure: 0.5 },
+        { x: textBBox.maxX, y: textBBox.minY, pressure: 0.5 },
+        { x: textBBox.maxX, y: textBBox.maxY, pressure: 0.5 },
+        { x: textBBox.minX, y: textBBox.maxY, pressure: 0.5 },
+    ];
+
+    // Check if any corner is inside the polygon
+    if (corners.some(corner => isPointInPolygon(corner, selectionPoly))) {
+        return true;
+    }
+
+    // Check if the center of the text is inside the polygon
+    const centerPoint: Point = {
+        x: (textBBox.minX + textBBox.maxX) / 2,
+        y: (textBBox.minY + textBBox.maxY) / 2,
+        pressure: 0.5,
+    };
+
+    return isPointInPolygon(centerPoint, selectionPoly);
+}

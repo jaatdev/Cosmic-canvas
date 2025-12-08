@@ -47,6 +47,7 @@ interface CanvasState {
 
     // Lasso selection
     selectedStrokeIds: string[];
+    selectedTextIds: string[];
 
     // Background
     canvasBackground: string;
@@ -90,6 +91,8 @@ interface CanvasState {
     setFontStyle: (style: 'normal' | 'italic') => void;
     setTextBackground: (color: string) => void;
     selectStrokes: (ids: string[]) => void;
+    selectText: (ids: string[]) => void;
+    clearSelection: () => void;
     transformStrokes: (dx: number, dy: number, scaleX?: number, scaleY?: number, origin?: { x: number; y: number }) => void;
     scaleSelectedStrokes: (factor: number) => void;
     duplicateSelectedStrokes: () => void;
@@ -152,6 +155,7 @@ export const useStore = create<CanvasState>((set, get) => ({
 
     // Lasso selection - empty by default
     selectedStrokeIds: [],
+    selectedTextIds: [],
 
     // Add stroke with unified history
     addStroke: (strokeData, forceEraser, isShape, isHighlighter) => {
@@ -735,27 +739,47 @@ export const useStore = create<CanvasState>((set, get) => ({
 
     // Lasso selection actions
     selectStrokes: (ids) => set({ selectedStrokeIds: ids }),
+    selectText: (ids) => set({ selectedTextIds: ids }),
+    clearSelection: () => set({ selectedStrokeIds: [], selectedTextIds: [] }),
 
     transformStrokes: (dx, dy, scaleX = 1, scaleY = 1, origin) => {
         const state = get();
-        if (state.selectedStrokeIds.length === 0) return;
+        const hasStrokes = state.selectedStrokeIds.length > 0;
+        const hasText = state.selectedTextIds.length > 0;
+
+        if (!hasStrokes && !hasText) return;
 
         // If scaling, we need an origin point (center of bbox)
         let center = origin;
         if ((scaleX !== 1 || scaleY !== 1) && !center) {
-            // Calculate center from selected strokes
+            // Calculate center from all selected items
             const selectedStrokes = state.strokes.filter(s => state.selectedStrokeIds.includes(s.id));
-            const allPoints = selectedStrokes.flatMap(s => s.points);
-            const xs = allPoints.map(p => p.x);
-            const ys = allPoints.map(p => p.y);
-            center = {
-                x: (Math.min(...xs) + Math.max(...xs)) / 2,
-                y: (Math.min(...ys) + Math.max(...ys)) / 2,
-            };
+            const selectedTexts = state.textNodes.filter(t => state.selectedTextIds.includes(t.id));
+
+            const strokePoints = selectedStrokes.flatMap(s => s.points);
+            const strokeXs = strokePoints.map(p => p.x);
+            const strokeYs = strokePoints.map(p => p.y);
+
+            // Include text bounds
+            const textXs = selectedTexts.flatMap(t => [t.x, t.x + t.content.length * t.fontSize * 0.6]);
+            const textYs = selectedTexts.flatMap(t => [t.y, t.y + t.fontSize * 1.2]);
+
+            const allXs = [...strokeXs, ...textXs];
+            const allYs = [...strokeYs, ...textYs];
+
+            if (allXs.length > 0 && allYs.length > 0) {
+                center = {
+                    x: (Math.min(...allXs) + Math.max(...allXs)) / 2,
+                    y: (Math.min(...allYs) + Math.max(...allYs)) / 2,
+                };
+            }
         }
 
-        set({
-            strokes: state.strokes.map(stroke =>
+        const updates: Partial<CanvasState> = {};
+
+        // Transform strokes
+        if (hasStrokes) {
+            updates.strokes = state.strokes.map(stroke =>
                 state.selectedStrokeIds.includes(stroke.id)
                     ? {
                         ...stroke,
@@ -778,27 +802,60 @@ export const useStore = create<CanvasState>((set, get) => ({
                         })
                     }
                     : stroke
-            ),
-        });
+            );
+        }
+
+        // Transform text nodes
+        if (hasText) {
+            updates.textNodes = state.textNodes.map(node =>
+                state.selectedTextIds.includes(node.id)
+                    ? {
+                        ...node,
+                        // Scale position relative to center
+                        x: center ? center.x + (node.x - center.x) * scaleX + dx : node.x + dx,
+                        y: center ? center.y + (node.y - center.y) * scaleY + dy : node.y + dy,
+                        // Scale font size proportionally
+                        fontSize: Math.max(8, Math.min(200, node.fontSize * scaleX)),
+                    }
+                    : node
+            );
+        }
+
+        set(updates);
     },
 
     scaleSelectedStrokes: (factor) => {
         const state = get();
-        if (state.selectedStrokeIds.length === 0) return;
+        const hasStrokes = state.selectedStrokeIds.length > 0;
+        const hasText = state.selectedTextIds.length > 0;
 
-        // Calculate bounding box center
+        if (!hasStrokes && !hasText) return;
+
+        // Calculate combined bounding box center
         const selectedStrokes = state.strokes.filter(s => state.selectedStrokeIds.includes(s.id));
-        const allPoints = selectedStrokes.flatMap(s => s.points);
-        const xs = allPoints.map(p => p.x);
-        const ys = allPoints.map(p => p.y);
+        const selectedTexts = state.textNodes.filter(t => state.selectedTextIds.includes(t.id));
+
+        const strokePoints = selectedStrokes.flatMap(s => s.points);
+        const strokeXs = strokePoints.map(p => p.x);
+        const strokeYs = strokePoints.map(p => p.y);
+        const textXs = selectedTexts.flatMap(t => [t.x, t.x + t.content.length * t.fontSize * 0.6]);
+        const textYs = selectedTexts.flatMap(t => [t.y, t.y + t.fontSize * 1.2]);
+
+        const allXs = [...strokeXs, ...textXs];
+        const allYs = [...strokeYs, ...textYs];
+
+        if (allXs.length === 0 || allYs.length === 0) return;
+
         const center = {
-            x: (Math.min(...xs) + Math.max(...xs)) / 2,
-            y: (Math.min(...ys) + Math.max(...ys)) / 2,
+            x: (Math.min(...allXs) + Math.max(...allXs)) / 2,
+            y: (Math.min(...allYs) + Math.max(...allYs)) / 2,
         };
 
-        // Apply proportional scaling
-        set({
-            strokes: state.strokes.map(stroke =>
+        const updates: Partial<CanvasState> = {};
+
+        // Scale strokes
+        if (hasStrokes) {
+            updates.strokes = state.strokes.map(stroke =>
                 state.selectedStrokeIds.includes(stroke.id)
                     ? {
                         ...stroke,
@@ -809,8 +866,24 @@ export const useStore = create<CanvasState>((set, get) => ({
                         }))
                     }
                     : stroke
-            ),
-        });
+            );
+        }
+
+        // Scale text nodes
+        if (hasText) {
+            updates.textNodes = state.textNodes.map(node =>
+                state.selectedTextIds.includes(node.id)
+                    ? {
+                        ...node,
+                        x: center.x + (node.x - center.x) * factor,
+                        y: center.y + (node.y - center.y) * factor,
+                        fontSize: Math.max(8, Math.min(200, node.fontSize * factor)),
+                    }
+                    : node
+            );
+        }
+
+        set(updates);
     },
 
     duplicateSelectedStrokes: () => {
@@ -836,11 +909,16 @@ export const useStore = create<CanvasState>((set, get) => ({
 
     deleteSelectedStrokes: () => {
         const state = get();
-        if (state.selectedStrokeIds.length === 0) return;
+        const hasStrokes = state.selectedStrokeIds.length > 0;
+        const hasText = state.selectedTextIds.length > 0;
+
+        if (!hasStrokes && !hasText) return;
 
         set({
             strokes: state.strokes.filter(s => !state.selectedStrokeIds.includes(s.id)),
+            textNodes: state.textNodes.filter(t => !state.selectedTextIds.includes(t.id)),
             selectedStrokeIds: [],
+            selectedTextIds: [],
         });
     },
 
