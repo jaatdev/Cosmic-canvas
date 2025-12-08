@@ -82,6 +82,8 @@ interface CanvasState {
     setTextBackground: (color: string) => void;
     selectStrokes: (ids: string[]) => void;
     transformStrokes: (dx: number, dy: number, scaleX?: number, scaleY?: number, origin?: { x: number; y: number }) => void;
+    scaleSelectedStrokes: (factor: number) => void;
+    duplicateSelectedStrokes: () => void;
     deleteSelectedStrokes: () => void;
     clearStrokeSelection: () => void;
     setCanvasBackground: (color: string) => void;
@@ -734,6 +736,58 @@ export const useStore = create<CanvasState>((set, get) => ({
                     }
                     : stroke
             ),
+        });
+    },
+
+    scaleSelectedStrokes: (factor) => {
+        const state = get();
+        if (state.selectedStrokeIds.length === 0) return;
+
+        // Calculate bounding box center
+        const selectedStrokes = state.strokes.filter(s => state.selectedStrokeIds.includes(s.id));
+        const allPoints = selectedStrokes.flatMap(s => s.points);
+        const xs = allPoints.map(p => p.x);
+        const ys = allPoints.map(p => p.y);
+        const center = {
+            x: (Math.min(...xs) + Math.max(...xs)) / 2,
+            y: (Math.min(...ys) + Math.max(...ys)) / 2,
+        };
+
+        // Apply proportional scaling
+        set({
+            strokes: state.strokes.map(stroke =>
+                state.selectedStrokeIds.includes(stroke.id)
+                    ? {
+                        ...stroke,
+                        points: stroke.points.map(p => ({
+                            x: center.x + (p.x - center.x) * factor,
+                            y: center.y + (p.y - center.y) * factor,
+                            pressure: p.pressure,
+                        }))
+                    }
+                    : stroke
+            ),
+        });
+    },
+
+    duplicateSelectedStrokes: () => {
+        const state = get();
+        if (state.selectedStrokeIds.length === 0) return;
+
+        const selectedStrokes = state.strokes.filter(s => state.selectedStrokeIds.includes(s.id));
+        const duplicates = selectedStrokes.map(stroke => ({
+            ...stroke,
+            id: `stroke-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            points: stroke.points.map(p => ({
+                ...p,
+                x: p.x + 20,
+                y: p.y + 20,
+            }))
+        }));
+
+        set({
+            strokes: [...state.strokes, ...duplicates],
+            selectedStrokeIds: duplicates.map(d => d.id),
         });
     },
 

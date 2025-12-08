@@ -11,6 +11,7 @@ import { PAGE_HEIGHT } from '@/constants/canvas';
 import BackgroundLayer from './BackgroundLayer';
 import ObjectLayer from './ObjectLayer';
 import TextLayer from './TextLayer';
+import LassoLayer from './LassoLayer';
 
 // perfect-freehand options for gel pen feel
 const getStrokeOptions = (size: number) => ({
@@ -912,6 +913,9 @@ export default function Stage() {
                     ref={staticLayerRef}
                     style={{ ...canvasStyle, zIndex: 10, pointerEvents: 'none' }}
                 />
+
+                {/* Z-Index 15: Lasso Selection UI */}
+                <LassoLayer totalHeight={totalHeight} />
 
                 {/* Z-Index 20: Active Stroke */}
                 <canvas
