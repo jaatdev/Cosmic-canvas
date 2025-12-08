@@ -29,6 +29,10 @@ interface CanvasState {
     penWidth: number;
     eraserWidth: number;
 
+    // Highlighter tool
+    highlighterColor: string;
+    highlighterWidth: number;
+
     // Shape tool
     activeShape: ShapeType;
 
@@ -49,7 +53,7 @@ interface CanvasState {
     canvasPattern: Pattern;
 
     // Actions
-    addStroke: (stroke: Omit<Stroke, 'id' | 'isEraser'>, forceEraser?: boolean, isShape?: boolean) => void;
+    addStroke: (stroke: Omit<Stroke, 'id' | 'isEraser'>, forceEraser?: boolean, isShape?: boolean, isHighlighter?: boolean) => void;
     addImage: (image: CanvasImage) => void;
     selectImage: (id: string | null) => void;
     updateImage: (id: string, updates: Partial<CanvasImage>) => void;
@@ -77,6 +81,8 @@ interface CanvasState {
     setPenColor: (color: string) => void;
     setPenWidth: (width: number) => void;
     setEraserWidth: (width: number) => void;
+    setHighlighterColor: (color: string) => void;
+    setHighlighterWidth: (width: number) => void;
     setShape: (shape: ShapeType) => void;
     setFont: (font: string) => void;
     setFontSize: (size: number) => void;
@@ -124,6 +130,10 @@ export const useStore = create<CanvasState>((set, get) => ({
     penWidth: 3,             // Finer control
     eraserWidth: 20,
 
+    // Highlighter tool - Neon Yellow default
+    highlighterColor: '#ffff00',
+    highlighterWidth: 20,
+
     // Shape tool - default to rectangle
     activeShape: 'rectangle',
 
@@ -144,18 +154,33 @@ export const useStore = create<CanvasState>((set, get) => ({
     selectedStrokeIds: [],
 
     // Add stroke with unified history
-    addStroke: (strokeData, forceEraser, isShape) => {
+    addStroke: (strokeData, forceEraser, isShape, isHighlighter) => {
         const state = get();
         // Use forceEraser if provided (for barrel button), otherwise check current tool
         const isEraser = forceEraser !== undefined ? forceEraser : state.currentTool === 'eraser';
+        // Use isHighlighter if provided, otherwise check current tool
+        const highlighter = isHighlighter !== undefined ? isHighlighter : state.currentTool === 'highlighter';
+
+        // Determine size and color based on tool type
+        let size = strokeData.size;
+        let color = strokeData.color;
+
+        if (isEraser) {
+            size = state.eraserWidth;
+            color = '#000000';
+        } else if (highlighter) {
+            size = state.highlighterWidth;
+            color = state.highlighterColor;
+        }
 
         const stroke: Stroke = {
             id: generateId(),
             ...strokeData,
-            size: isEraser ? state.eraserWidth : state.penWidth,
-            color: isEraser ? '#000000' : state.penColor,
+            size,
+            color,
             isEraser,
-            isShape: isShape || false,  // Preserve shape flag for proper rendering
+            isShape: isShape || false,
+            isHighlighter: highlighter,
         };
 
         set({
@@ -693,6 +718,10 @@ export const useStore = create<CanvasState>((set, get) => ({
 
     // Eraser settings
     setEraserWidth: (width) => set({ eraserWidth: Math.max(5, Math.min(100, width)) }),
+
+    // Highlighter settings
+    setHighlighterColor: (color) => set({ highlighterColor: color }),
+    setHighlighterWidth: (width) => set({ highlighterWidth: Math.max(10, Math.min(50, width)) }),
 
     // Shape tool - sets active shape and switches to shape tool
     setShape: (shape) => set({ activeShape: shape, currentTool: 'shape' }),

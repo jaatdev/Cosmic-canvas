@@ -13,9 +13,10 @@ export interface Stroke {
     size: number;
     isEraser: boolean;
     isShape?: boolean;  // True for geometric shapes (rendered with lines, not freehand)
+    isHighlighter?: boolean;  // True for highlighter strokes (semi-transparent)
 }
 
-export type Tool = 'pen' | 'eraser' | 'select' | 'shape' | 'text' | 'lasso';
+export type Tool = 'pen' | 'eraser' | 'select' | 'shape' | 'text' | 'lasso' | 'highlighter';
 
 export type ShapeType = 'rectangle' | 'circle' | 'triangle' | 'line' | 'arrow';
 

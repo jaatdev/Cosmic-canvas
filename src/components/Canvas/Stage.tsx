@@ -90,6 +90,8 @@ export default function Stage() {
         projectName,
         canvasBackground,
         canvasPattern,
+        highlighterColor,
+        highlighterWidth,
         addStroke,
         addImage,
         selectImage,
@@ -151,17 +153,26 @@ export default function Stage() {
     // Get current stroke settings based on tool
     const getCurrentStrokeSettings = useCallback(() => {
         if (currentTool === 'eraser') {
-            return { color: '#000000', size: eraserWidth, isEraser: true };
+            return { color: '#000000', size: eraserWidth, isEraser: true, isHighlighter: false };
         }
-        return { color: penColor, size: penWidth, isEraser: false };
-    }, [currentTool, penColor, penWidth, eraserWidth]);
+        if (currentTool === 'highlighter') {
+            return { color: highlighterColor, size: highlighterWidth, isEraser: false, isHighlighter: true };
+        }
+        return { color: penColor, size: penWidth, isEraser: false, isHighlighter: false };
+    }, [currentTool, penColor, penWidth, eraserWidth, highlighterColor, highlighterWidth]);
 
     // Draw a single stroke to a canvas context
     const drawStroke = useCallback((
         ctx: CanvasRenderingContext2D,
-        stroke: Pick<Stroke, 'points' | 'color' | 'size' | 'isEraser'> & { isShape?: boolean }
+        stroke: Pick<Stroke, 'points' | 'color' | 'size' | 'isEraser'> & { isShape?: boolean; isHighlighter?: boolean }
     ) => {
         if (stroke.points.length < 2) return;
+
+        // Save context state for highlighter
+        const wasHighlighter = stroke.isHighlighter;
+        if (wasHighlighter) {
+            ctx.globalAlpha = 0.5;
+        }
 
         if (stroke.isEraser) {
             ctx.globalCompositeOperation = 'destination-out';
@@ -182,6 +193,25 @@ export default function Stage() {
                 ctx.lineTo(stroke.points[i].x, stroke.points[i].y);
             }
             ctx.stroke();
+            if (wasHighlighter) ctx.globalAlpha = 1.0;
+            return;
+        }
+
+        // Highlighter strokes: use butt lineCap for chisel tip feel
+        if (wasHighlighter) {
+            ctx.strokeStyle = stroke.color;
+            ctx.lineWidth = stroke.size;
+            ctx.lineCap = 'butt';
+            ctx.lineJoin = 'round';
+
+            ctx.beginPath();
+            ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
+            for (let i = 1; i < stroke.points.length; i++) {
+                ctx.lineTo(stroke.points[i].x, stroke.points[i].y);
+            }
+            ctx.stroke();
+            ctx.globalAlpha = 1.0;
+            ctx.lineCap = 'round';
             return;
         }
 

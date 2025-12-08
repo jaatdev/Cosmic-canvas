@@ -33,12 +33,13 @@ import {
     Music,
     AlignJustify,
     Layout,
-    FileX2
+    FileX2,
+    Highlighter
 } from 'lucide-react';
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { Pattern } from '@/types';
 
-type ActivePanel = 'none' | 'pen' | 'eraser' | 'bg' | 'zoom' | 'shape' | 'text';
+type ActivePanel = 'none' | 'pen' | 'eraser' | 'bg' | 'zoom' | 'shape' | 'text' | 'highlighter';
 
 // Smart Scale: Calculate dimensions to fit viewport
 const calculateSmartScale = (
@@ -121,6 +122,10 @@ export default function Toolbar() {
         setFontStyle,
         setTextBackground,
         resetProject,
+        highlighterColor,
+        highlighterWidth,
+        setHighlighterColor,
+        setHighlighterWidth,
     } = useStore();
 
     const penColorRef = useRef<HTMLInputElement>(null);
@@ -137,6 +142,7 @@ export default function Toolbar() {
     const isShape = currentTool === 'shape';
     const isText = currentTool === 'text';
     const isLasso = currentTool === 'lasso';
+    const isHighlighter = currentTool === 'highlighter';
     const canUndoAction = historyStack.length > 0;
     const canRedoAction = redoStack.length > 0;
 
@@ -302,6 +308,15 @@ export default function Toolbar() {
         setActivePanel('none');
     };
 
+    const handleHighlighterClick = () => {
+        if (isHighlighter) {
+            setActivePanel(activePanel === 'highlighter' ? 'none' : 'highlighter');
+        } else {
+            setTool('highlighter');
+            setActivePanel('highlighter');
+        }
+    };
+
     const handleBgClick = () => {
         setActivePanel(activePanel === 'bg' ? 'none' : 'bg');
     };
@@ -436,6 +451,59 @@ export default function Toolbar() {
                                 onChange={(e) => setEraserWidth(parseInt(e.target.value))}
                                 className="w-full h-2 rounded-full appearance-none cursor-pointer
                                     bg-white/20 accent-white"
+                            />
+                        </div>
+                    </>
+                )}
+
+                {/* Highlighter Settings Panel */}
+                {activePanel === 'highlighter' && (
+                    <>
+                        <div className="flex items-center justify-between mb-3">
+                            <span className="text-xs text-white/60 uppercase tracking-wider font-medium">Highlighter</span>
+                            <button
+                                onClick={() => setActivePanel('none')}
+                                className="p-1 rounded-lg hover:bg-white/10 transition-colors"
+                            >
+                                <X className="w-3 h-3 text-white/40" />
+                            </button>
+                        </div>
+
+                        {/* Neon Color Palette */}
+                        <div className="flex gap-2 mb-4">
+                            {[
+                                { color: '#ffff00', label: 'Yellow' },
+                                { color: '#00ff00', label: 'Green' },
+                                { color: '#ff00ff', label: 'Pink' },
+                                { color: '#00ffff', label: 'Cyan' },
+                            ].map((item) => (
+                                <button
+                                    key={item.color}
+                                    onClick={() => setHighlighterColor(item.color)}
+                                    className={`w-8 h-8 rounded-lg border-2 transition-all hover:scale-110 ${highlighterColor === item.color
+                                        ? 'border-white ring-2 ring-white/30'
+                                        : 'border-white/30 hover:border-white/50'
+                                        }`}
+                                    style={{ backgroundColor: item.color }}
+                                    title={item.label}
+                                />
+                            ))}
+                        </div>
+
+                        {/* Size Slider */}
+                        <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                                <span className="text-xs text-white/50">Thickness</span>
+                                <span className="text-xs text-white/70 font-mono">{highlighterWidth}px</span>
+                            </div>
+                            <input
+                                type="range"
+                                min={10}
+                                max={50}
+                                value={highlighterWidth}
+                                onChange={(e) => setHighlighterWidth(parseInt(e.target.value))}
+                                className="w-full h-2 rounded-full appearance-none cursor-pointer
+                                    bg-white/20 accent-yellow-400"
                             />
                         </div>
                     </>
@@ -733,6 +801,17 @@ export default function Toolbar() {
                     title="Eraser Tool (E)"
                 >
                     <Eraser className={`w-6 h-6 ${isEraser ? 'text-white' : 'text-white/60'}`} />
+                </button>
+
+                <button
+                    onClick={handleHighlighterClick}
+                    className={`relative p-3 rounded-xl transition-all hover:scale-110 ${isHighlighter
+                        ? 'bg-yellow-500/40 ring-2 ring-yellow-400/50'
+                        : 'bg-white/5 hover:bg-yellow-500/20'
+                        }`}
+                    title="Highlighter Tool (H)"
+                >
+                    <Highlighter className={`w-6 h-6 ${isHighlighter ? 'text-yellow-300' : 'text-white/60'}`} />
                 </button>
 
                 <button
