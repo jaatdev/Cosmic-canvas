@@ -201,15 +201,13 @@ export default function Toolbar() {
         }
     }, []);
 
-    // Export handler - uses fixed PAGE_HEIGHT for consistent PDF output
+    // Export handler - uses fixed A4 dimensions for consistent PDF output
     const handleExport = useCallback(async () => {
         if (isExporting) return;
         setIsExporting(true);
 
         try {
             await exportToPdf(strokes, images, {
-                width: window.innerWidth,
-                pageHeight: PAGE_HEIGHT, // Use fixed PAGE_HEIGHT for consistent pages
                 pageCount,
                 background: canvasBackground,
                 pattern: canvasPattern,

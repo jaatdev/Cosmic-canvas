@@ -7,7 +7,7 @@ import { getSvgPathFromStroke } from '@/utils/ink';
 import { getShapePoints, doesStrokeIntersectSelection, getStrokesBoundingBox, isPointInBBox } from '@/utils/geometry';
 import { useStore } from '@/store/useStore';
 import { Point, Stroke, CanvasImage } from '@/types';
-import { PAGE_HEIGHT } from '@/constants/canvas';
+import { PAGE_HEIGHT, PAGE_WIDTH } from '@/constants/canvas';
 import BackgroundLayer from './BackgroundLayer';
 import ObjectLayer from './ObjectLayer';
 import TextLayer from './TextLayer';
@@ -181,7 +181,7 @@ export default function Stage() {
             // Draw dashed line
             ctx.beginPath();
             ctx.moveTo(0, y);
-            ctx.lineTo(width, y);
+            ctx.lineTo(PAGE_WIDTH, y);
             ctx.stroke();
 
             // Draw page label
@@ -189,17 +189,17 @@ export default function Stage() {
         }
 
         ctx.restore();
-    }, [pageCount, width]);
+    }, [pageCount]);
 
     // Setup canvas with High-DPI scaling - MUST update on pageCount change
     const setupCanvas = useCallback((canvas: HTMLCanvasElement | null, forceRedraw: boolean = false) => {
-        if (!canvas || width === 0 || totalHeight === 0) return null;
+        if (!canvas || totalHeight === 0) return null;
 
         const ctx = canvas.getContext('2d');
         if (!ctx) return null;
 
         // Only resize if dimensions changed (resizing clears canvas)
-        const targetWidth = width * pixelRatio;
+        const targetWidth = PAGE_WIDTH * pixelRatio;
         const targetHeight = totalHeight * pixelRatio;
 
         if (canvas.width !== targetWidth || canvas.height !== targetHeight || forceRedraw) {
@@ -211,18 +211,18 @@ export default function Stage() {
         ctx.scale(pixelRatio, pixelRatio);
 
         return ctx;
-    }, [width, totalHeight, pixelRatio]);
+    }, [totalHeight, pixelRatio]);
 
     // Render static layer (stroke history + page separators)
     const renderStaticLayer = useCallback(() => {
         const canvas = staticLayerRef.current;
-        if (!canvas || width === 0 || totalHeight === 0) return;
+        if (!canvas || totalHeight === 0) return;
 
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
 
         // Resize canvas if needed
-        const targetWidth = width * pixelRatio;
+        const targetWidth = PAGE_WIDTH * pixelRatio;
         const targetHeight = totalHeight * pixelRatio;
 
         if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
@@ -232,7 +232,7 @@ export default function Stage() {
 
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.scale(pixelRatio, pixelRatio);
-        ctx.clearRect(0, 0, width, totalHeight);
+        ctx.clearRect(0, 0, PAGE_WIDTH, totalHeight);
 
         // Draw all strokes
         strokes.forEach((stroke) => drawStroke(ctx, stroke));
@@ -240,19 +240,19 @@ export default function Stage() {
 
         // Draw page separators on top
         drawPageSeparators(ctx);
-    }, [width, totalHeight, pixelRatio, strokes, drawStroke, drawPageSeparators]);
+    }, [totalHeight, pixelRatio, strokes, drawStroke, drawPageSeparators]);
 
     // Render active layer (current stroke or shape preview)
     // Account for barrel button override for visual feedback
     const renderActiveLayer = useCallback(() => {
         const canvas = activeLayerRef.current;
-        if (!canvas || width === 0 || totalHeight === 0) return;
+        if (!canvas || totalHeight === 0) return;
 
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
 
         // Resize canvas if needed
-        const targetWidth = width * pixelRatio;
+        const targetWidth = PAGE_WIDTH * pixelRatio;
         const targetHeight = totalHeight * pixelRatio;
 
         if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
@@ -262,7 +262,7 @@ export default function Stage() {
 
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.scale(pixelRatio, pixelRatio);
-        ctx.clearRect(0, 0, width, totalHeight);
+        ctx.clearRect(0, 0, PAGE_WIDTH, totalHeight);
 
         // Shape tool rendering - draw geometric shapes with crisp lines
         if (currentTool === 'shape' && shapeStartRef.current && currentPointsRef.current && currentPointsRef.current.length > 0) {
@@ -358,7 +358,7 @@ export default function Stage() {
                 ctx.stroke();
             });
         }
-    }, [width, totalHeight, pixelRatio, getCurrentStrokeSettings, drawStroke, isBarrelButtonDown, eraserWidth, currentTool, activeShape, penColor, penWidth, isShiftHeld, lassoPoints, selectedStrokeIds, strokes]);
+    }, [totalHeight, pixelRatio, getCurrentStrokeSettings, drawStroke, isBarrelButtonDown, eraserWidth, currentTool, activeShape, penColor, penWidth, isShiftHeld, lassoPoints, selectedStrokeIds, strokes]);
 
     // Re-render static layer when stroke history or page count changes
     useEffect(() => {
@@ -850,78 +850,92 @@ export default function Stage() {
     };
 
     return (
+        /* The Desk - dark background, handles scrolling */
         <div
-            ref={containerRef}
             style={{
                 position: 'relative',
                 width: '100vw',
-                height: totalHeight * zoom, // Scale container height with zoom
                 minHeight: '100vh',
-                overflow: 'visible',
-                // CSS Hardening for palm rejection
-                touchAction: 'none',
-                userSelect: 'none',
-                WebkitUserSelect: 'none',
-                cursor: getCursor(),
+                backgroundColor: '#1a1a2e',
+                display: 'flex',
+                justifyContent: 'center',
+                overflow: 'auto',
             }}
-            // Disable context menu (prevents right-click menu from palm/pen button)
-            onContextMenu={(e) => e.preventDefault()}
-            onPointerDown={handlePointerDown}
-            onPointerMove={handlePointerMove}
-            onPointerUp={handlePointerUp}
-            onPointerLeave={handlePointerLeave}
         >
-            {/* Transform Wrapper - scales all canvas layers */}
+            {/* The Paper - fixed A4 width, centered */}
             <div
+                ref={containerRef}
                 style={{
-                    transform: `scale(${zoom})`,
-                    transformOrigin: 'top left',
-                    width: '100vw',
-                    height: totalHeight,
+                    position: 'relative',
+                    width: PAGE_WIDTH * zoom,
+                    height: totalHeight * zoom,
+                    minHeight: '100vh',
+                    flexShrink: 0,
+                    // CSS Hardening for palm rejection
+                    touchAction: 'none',
+                    userSelect: 'none',
+                    WebkitUserSelect: 'none',
+                    cursor: getCursor(),
+                    // Paper shadow effect
+                    boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
                 }}
+                onContextMenu={(e) => e.preventDefault()}
+                onPointerDown={handlePointerDown}
+                onPointerMove={handlePointerMove}
+                onPointerUp={handlePointerUp}
+                onPointerLeave={handlePointerLeave}
             >
-                {/* Scroll Snap Targets - invisible page markers for notebook-style scrolling */}
-                {/* Uses FIXED PAGE_HEIGHT for consistent page positions */}
-                {Array.from({ length: pageCount }).map((_, i) => (
-                    <div
-                        key={`page-snap-${i}`}
-                        className="page-snap"
-                        style={{
-                            position: 'absolute',
-                            top: i * PAGE_HEIGHT,
-                            left: 0,
-                            width: '100%',
-                            height: PAGE_HEIGHT,
-                            scrollSnapAlign: 'start',
-                            scrollSnapStop: 'always',
-                            pointerEvents: 'none',
-                        }}
+                {/* Transform Wrapper - scales all canvas layers */}
+                <div
+                    style={{
+                        transform: `scale(${zoom})`,
+                        transformOrigin: 'top left',
+                        width: PAGE_WIDTH,
+                        height: totalHeight,
+                    }}
+                >
+                    {/* Scroll Snap Targets - invisible page markers */}
+                    {Array.from({ length: pageCount }).map((_, i) => (
+                        <div
+                            key={`page-snap-${i}`}
+                            className="page-snap"
+                            style={{
+                                position: 'absolute',
+                                top: i * PAGE_HEIGHT,
+                                left: 0,
+                                width: '100%',
+                                height: PAGE_HEIGHT,
+                                scrollSnapAlign: 'start',
+                                scrollSnapStop: 'always',
+                                pointerEvents: 'none',
+                            }}
+                        />
+                    ))}
+
+                    {/* Z-Index 0: Background */}
+                    <BackgroundLayer totalHeight={totalHeight} />
+
+                    {/* Z-Index 5: Images */}
+                    <ObjectLayer totalHeight={totalHeight} />
+
+                    {/* Z-Index 7: Text Nodes */}
+                    <TextLayer totalHeight={totalHeight} />
+
+                    {/* Z-Index 10: Stroke History + Page Separators */}
+                    <canvas
+                        ref={staticLayerRef}
+                        style={{ ...canvasStyle, zIndex: 10, pointerEvents: 'none' }}
                     />
-                ))}
 
-                {/* Z-Index 0: Background */}
-                <BackgroundLayer totalHeight={totalHeight} />
+                    {/* Z-Index 15: Lasso Selection UI */}
+                    <LassoLayer totalHeight={totalHeight} />
 
-                {/* Z-Index 5: Images */}
-                <ObjectLayer totalHeight={totalHeight} />
-
-                {/* Z-Index 7: Text Nodes */}
-                <TextLayer totalHeight={totalHeight} />
-
-                {/* Z-Index 10: Stroke History + Page Separators */}
-                <canvas
-                    ref={staticLayerRef}
-                    style={{ ...canvasStyle, zIndex: 10, pointerEvents: 'none' }}
-                />
-
-                {/* Z-Index 15: Lasso Selection UI */}
-                <LassoLayer totalHeight={totalHeight} />
-
-                {/* Z-Index 20: Active Stroke */}
-                <canvas
-                    ref={activeLayerRef}
-                    style={{ ...canvasStyle, zIndex: 20, pointerEvents: 'none' }}
-                />
+                    {/* Z-Index 20: Active Stroke */}
+                    <canvas
+                        ref={activeLayerRef}
+                        style={{ ...canvasStyle, zIndex: 20, pointerEvents: 'none' }}
+                    />
+                </div>
             </div>
         </div>
     );
