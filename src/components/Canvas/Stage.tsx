@@ -12,6 +12,7 @@ import BackgroundLayer from './BackgroundLayer';
 import ObjectLayer from './ObjectLayer';
 import TextLayer from './TextLayer';
 import LassoLayer from './LassoLayer';
+import { saveState } from '@/utils/storage';
 
 // perfect-freehand options for gel pen feel
 const getStrokeOptions = (size: number) => ({
@@ -76,6 +77,8 @@ export default function Stage() {
     // Zustand store
     const {
         strokes,
+        images,
+        textNodes,
         currentTool,
         penColor,
         penWidth,
@@ -84,6 +87,9 @@ export default function Stage() {
         zoom,
         activeShape,
         selectedStrokeIds,
+        projectName,
+        canvasBackground,
+        canvasPattern,
         addStroke,
         addImage,
         selectImage,
@@ -92,6 +98,8 @@ export default function Stage() {
         clearStrokeSelection,
         setPageHeight,
         fitToScreen,
+        loadProject,
+        getPersistedState,
         undo,
         redo
     } = useStore();
@@ -121,6 +129,24 @@ export default function Stage() {
     useEffect(() => {
         fitToScreen();
     }, [fitToScreen]);
+
+    // Hydration: Load saved project on mount
+    useEffect(() => {
+        loadProject();
+    }, [loadProject]);
+
+    // Auto-save: Debounced save whenever content changes
+    useEffect(() => {
+        const timeoutId = setTimeout(() => {
+            const state = getPersistedState();
+            // Only save if there's actual content
+            if (state.strokes.length > 0 || state.images.length > 0 || state.textNodes.length > 0) {
+                saveState(state);
+            }
+        }, 1000); // 1 second debounce
+
+        return () => clearTimeout(timeoutId);
+    }, [strokes, images, textNodes, pageCount, projectName, canvasBackground, canvasPattern, penColor, penWidth, getPersistedState]);
 
     // Get current stroke settings based on tool
     const getCurrentStrokeSettings = useCallback(() => {

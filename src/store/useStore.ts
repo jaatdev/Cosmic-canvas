@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { Point, Stroke, Tool, Pattern, CanvasImage, ActionItem, ShapeType, TextNode } from '@/types';
 import { PAGE_WIDTH } from '@/constants/canvas';
+import { loadState, saveState, clearState, PersistedState } from '@/utils/storage';
 
 // Re-export types for convenience
 export type { Point, Stroke, Tool, Pattern, CanvasImage, ActionItem, ShapeType, TextNode };
@@ -91,6 +92,11 @@ interface CanvasState {
     setCanvasBackground: (color: string) => void;
     setCanvasPattern: (pattern: Pattern) => void;
     clearCanvas: () => void;
+
+    // Persistence
+    loadProject: () => Promise<void>;
+    resetProject: () => Promise<void>;
+    getPersistedState: () => PersistedState;
 
     // Computed helpers
     canUndo: () => boolean;
@@ -824,6 +830,69 @@ export const useStore = create<CanvasState>((set, get) => ({
         selectedImageId: null,
         pageCount: 1, // Reset to single page
     }),
+
+    // Persistence actions
+    loadProject: async () => {
+        const savedState = await loadState();
+        if (savedState) {
+            set({
+                strokes: savedState.strokes || [],
+                images: savedState.images || [],
+                textNodes: savedState.textNodes || [],
+                pageCount: savedState.pageCount || 1,
+                projectName: savedState.projectName || 'Untitled Universe',
+                canvasBackground: savedState.canvasBackground || '#3e3d3d',
+                canvasPattern: (savedState.canvasPattern as Pattern) || 'none',
+                penColor: savedState.penColor || '#d7d5d5',
+                penWidth: savedState.penWidth || 3,
+                activeFont: savedState.activeFont || 'Inter',
+                activeFontSize: savedState.activeFontSize || 24,
+                // Clear history on load (fresh start)
+                historyStack: [],
+                redoStack: [],
+            });
+        }
+    },
+
+    resetProject: async () => {
+        await clearState();
+        set({
+            strokes: [],
+            images: [],
+            textNodes: [],
+            historyStack: [],
+            redoStack: [],
+            selectedImageId: null,
+            selectedId: null,
+            selectedStrokeIds: [],
+            pageCount: 1,
+            currentPage: 1,
+            projectName: 'Untitled Universe',
+            canvasBackground: '#3e3d3d',
+            canvasPattern: 'none',
+            penColor: '#d7d5d5',
+            penWidth: 3,
+            activeFont: 'Inter',
+            activeFontSize: 24,
+        });
+    },
+
+    getPersistedState: () => {
+        const state = get();
+        return {
+            strokes: state.strokes,
+            images: state.images,
+            textNodes: state.textNodes,
+            pageCount: state.pageCount,
+            projectName: state.projectName,
+            canvasBackground: state.canvasBackground,
+            canvasPattern: state.canvasPattern,
+            penColor: state.penColor,
+            penWidth: state.penWidth,
+            activeFont: state.activeFont,
+            activeFontSize: state.activeFontSize,
+        };
+    },
 
     // Computed helpers
     canUndo: () => get().historyStack.length > 0,

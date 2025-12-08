@@ -32,7 +32,8 @@ import {
     Box,
     Music,
     AlignJustify,
-    Layout
+    Layout,
+    FileX2
 } from 'lucide-react';
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { Pattern } from '@/types';
@@ -119,6 +120,7 @@ export default function Toolbar() {
         setFontWeight,
         setFontStyle,
         setTextBackground,
+        resetProject,
     } = useStore();
 
     const penColorRef = useRef<HTMLInputElement>(null);
@@ -888,6 +890,22 @@ export default function Toolbar() {
                     title="Export PDF"
                 >
                     <Download className={`w-6 h-6 ${isExporting ? 'text-white/40 animate-pulse' : 'text-white/60 hover:text-green-400'}`} />
+                </button>
+
+                {/* Separator */}
+                <div className="w-px h-8 bg-white/10 mx-1" />
+
+                {/* New Project */}
+                <button
+                    onClick={() => {
+                        if (confirm('Start a new project? Your current work is saved automatically.')) {
+                            resetProject();
+                        }
+                    }}
+                    className="p-3 rounded-xl bg-white/5 hover:bg-red-500/20 hover:scale-110 transition-all"
+                    title="New Project"
+                >
+                    <FileX2 className="w-6 h-6 text-white/60 hover:text-red-400" />
                 </button>
             </div>
         </div>
