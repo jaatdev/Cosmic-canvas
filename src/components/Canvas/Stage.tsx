@@ -91,6 +91,7 @@ export default function Stage() {
         transformStrokes,
         clearStrokeSelection,
         setPageHeight,
+        fitToScreen,
         undo,
         redo
     } = useStore();
@@ -115,6 +116,11 @@ export default function Stage() {
     useEffect(() => {
         setPageHeight(PAGE_HEIGHT);
     }, [setPageHeight]);
+
+    // Auto-fit zoom to fill screen width on mount
+    useEffect(() => {
+        fitToScreen();
+    }, [fitToScreen]);
 
     // Get current stroke settings based on tool
     const getCurrentStrokeSettings = useCallback(() => {
@@ -519,8 +525,11 @@ export default function Stage() {
         // Strict palm rejection: only allow 'pen' or 'mouse', reject 'touch'
         if (e.pointerType !== 'pen' && e.pointerType !== 'mouse') return;
 
-        const x = e.pageX / zoom;
-        const y = e.pageY / zoom;
+        // Get canvas-relative coordinates using getBoundingClientRect
+        const rect = containerRef.current?.getBoundingClientRect();
+        if (!rect) return;
+        const x = (e.clientX - rect.left) / zoom;
+        const y = (e.clientY - rect.top) / zoom;
 
         // Lasso mode: Check for handle or bbox interaction
         if (currentTool === 'lasso' && selectedStrokeIds.length > 0) {
@@ -598,8 +607,11 @@ export default function Stage() {
         // Strict palm rejection: only allow 'pen' or 'mouse', reject 'touch'
         if (e.pointerType !== 'pen' && e.pointerType !== 'mouse') return;
 
-        const x = e.pageX / zoom;
-        const y = e.pageY / zoom;
+        // Get canvas-relative coordinates using getBoundingClientRect
+        const rect = containerRef.current?.getBoundingClientRect();
+        if (!rect) return;
+        const x = (e.clientX - rect.left) / zoom;
+        const y = (e.clientY - rect.top) / zoom;
 
         // Handle resizing via corner handles
         if (activeHandle && dragStart && dragStart.bbox) {

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { Point, Stroke, Tool, Pattern, CanvasImage, ActionItem, ShapeType, TextNode } from '@/types';
+import { PAGE_WIDTH } from '@/constants/canvas';
 
 // Re-export types for convenience
 export type { Point, Stroke, Tool, Pattern, CanvasImage, ActionItem, ShapeType, TextNode };
@@ -70,6 +71,7 @@ interface CanvasState {
     zoomIn: () => void;
     zoomOut: () => void;
     resetZoom: () => void;
+    fitToScreen: () => void;
     setIsFullscreen: (value: boolean) => void;
     setPenColor: (color: string) => void;
     setPenWidth: (width: number) => void;
@@ -669,6 +671,12 @@ export const useStore = create<CanvasState>((set, get) => ({
     zoomIn: () => set((state) => ({ zoom: Math.min(5.0, Math.round((state.zoom + 0.1) * 10) / 10) })),
     zoomOut: () => set((state) => ({ zoom: Math.max(0.1, Math.round((state.zoom - 0.1) * 10) / 10) })),
     resetZoom: () => set({ zoom: 1 }),
+    fitToScreen: () => {
+        // Calculate zoom to fill screen width
+        const screenWidth = typeof window !== 'undefined' ? window.innerWidth : 1920;
+        const newZoom = screenWidth / PAGE_WIDTH;
+        set({ zoom: Math.max(0.1, Math.min(5.0, newZoom)) });
+    },
 
     // Fullscreen / Zen Mode
     setIsFullscreen: (value) => set({ isFullscreen: value }),
