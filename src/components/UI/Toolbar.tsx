@@ -129,6 +129,7 @@ export default function Toolbar() {
         setHighlighterColor,
         setHighlighterWidth,
         pdfPageMapping,
+        fitToScreen,
     } = useStore();
 
     const penColorRef = useRef<HTMLInputElement>(null);
@@ -207,10 +208,14 @@ export default function Toolbar() {
             } else {
                 await document.exitFullscreen();
             }
+            // Trigger immersion lock after transition
+            setTimeout(() => {
+                fitToScreen();
+            }, 100);
         } catch (err) {
             console.error('Fullscreen error:', err);
         }
-    }, []);
+    }, [fitToScreen]);
 
     // Export handler - uses fixed A4 dimensions for consistent PDF output
     const handleExport = useCallback(async () => {

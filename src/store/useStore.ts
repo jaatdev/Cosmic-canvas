@@ -806,8 +806,8 @@ export const useStore = create<CanvasState>((set, get) => ({
         // Calculate zoom to fill screen width using dynamic canvas dimensions
         const { canvasDimensions } = get();
         const screenWidth = typeof window !== 'undefined' ? window.innerWidth : 1920;
-        // Add 5% padding so PDF doesn't touch edges perfectly
-        const newZoom = (screenWidth / canvasDimensions.width) * 0.95;
+        // Exact fit for Immersion Lock (no padding)
+        const newZoom = screenWidth / canvasDimensions.width;
         set({ zoom: Math.max(0.1, Math.min(5.0, newZoom)) });
     },
 
