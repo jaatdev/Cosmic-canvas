@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
 import { useStore } from '@/store/useStore';
+import { PDF_PAGE_GAP } from '@/constants/canvas';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
 
@@ -10,7 +11,8 @@ import 'react-pdf/dist/Page/TextLayer.css';
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
 // Virtualization window: render pages within this range of current page
-const RENDER_WINDOW = 2;
+// Increased buffer for smoother scrolling
+const RENDER_WINDOW = 5;
 
 /**
  * PDFLayer Component - Z-Index 1
@@ -25,6 +27,7 @@ export default function PDFLayer() {
         pdfFile,
         setPageCount,
         setCanvasDimensions,
+        fitToScreen,
         pageCount,
         currentPage,
         pdfPageMapping,
@@ -48,6 +51,17 @@ export default function PDFLayer() {
     useEffect(() => {
         setDimensionsDetected(false);
     }, [pdfFile]);
+
+    // Auto-fit to screen when canvas dimensions change (new PDF loaded)
+    useEffect(() => {
+        if (dimensionsDetected && pageWidth > 0) {
+            // Small delay to ensure state has propagated
+            const timer = setTimeout(() => {
+                fitToScreen();
+            }, 100);
+            return () => clearTimeout(timer);
+        }
+    }, [dimensionsDetected, pageWidth, fitToScreen]);
 
     // Calculate visible page range based on current page
     const { minPage, maxPage } = useMemo(() => {
@@ -93,9 +107,13 @@ export default function PDFLayer() {
         <div
             style={{
                 position: 'absolute',
-                inset: 0,
+                top: 0,
+                left: 0,
+                width: pageWidth,
+                height: (pageHeight * (numPages || pageCount)) + (PDF_PAGE_GAP * Math.max(0, (numPages || pageCount) - 1)),
                 zIndex: 1,
-                pointerEvents: 'none'
+                pointerEvents: 'none',
+                overflow: 'hidden',  // Prevent any PDF content from spilling out
             }}
         >
             <Document
@@ -120,7 +138,7 @@ export default function PDFLayer() {
                                 key={`placeholder_${index}`}
                                 style={{
                                     position: 'absolute',
-                                    top: index * pageHeight,
+                                    top: index * (pageHeight + PDF_PAGE_GAP),
                                     left: 0,
                                     width: pageWidth,
                                     height: pageHeight,
@@ -136,10 +154,11 @@ export default function PDFLayer() {
                             key={`page_wrapper_${index}`}
                             style={{
                                 position: 'absolute',
-                                top: index * pageHeight,
+                                top: index * (pageHeight + PDF_PAGE_GAP),
                                 left: 0,
                                 width: pageWidth,
                                 height: pageHeight,
+                                overflow: 'hidden',  // Clip any overflow from PDF
                             }}
                         >
                             <Page
@@ -148,6 +167,7 @@ export default function PDFLayer() {
                                 renderTextLayer={false}
                                 renderAnnotationLayer={false}
                                 canvasBackground="transparent"
+                                devicePixelRatio={Math.min(2, typeof window !== 'undefined' ? window.devicePixelRatio : 1)}
                                 onLoadSuccess={isFirstPage ? handleFirstPageLoadSuccess : undefined}
                                 loading={
                                     <div

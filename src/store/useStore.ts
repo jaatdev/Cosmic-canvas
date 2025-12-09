@@ -733,9 +733,11 @@ export const useStore = create<CanvasState>((set, get) => ({
     zoomOut: () => set((state) => ({ zoom: Math.max(0.1, Math.round((state.zoom - 0.1) * 10) / 10) })),
     resetZoom: () => set({ zoom: 1 }),
     fitToScreen: () => {
-        // Calculate zoom to fill screen width
+        // Calculate zoom to fill screen width using dynamic canvas dimensions
+        const { canvasDimensions } = get();
         const screenWidth = typeof window !== 'undefined' ? window.innerWidth : 1920;
-        const newZoom = screenWidth / PAGE_WIDTH;
+        // Add 5% padding so PDF doesn't touch edges perfectly
+        const newZoom = (screenWidth / canvasDimensions.width) * 0.95;
         set({ zoom: Math.max(0.1, Math.min(5.0, newZoom)) });
     },
 

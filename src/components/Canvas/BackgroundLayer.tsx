@@ -2,7 +2,6 @@
 
 import { useStore } from '@/store/useStore';
 import { Pattern } from '@/types';
-import { PAGE_HEIGHT } from '@/constants/canvas';
 
 interface BackgroundLayerProps {
     totalHeight?: number;
@@ -33,8 +32,11 @@ function getPatternColor(backgroundColor: string): string {
  * Supports grid, dots, ruled lines, isometric, music staves, and Cornell notes.
  */
 export default function BackgroundLayer({ totalHeight }: BackgroundLayerProps) {
-    const { canvasBackground, canvasPattern } = useStore();
+    const { canvasBackground, canvasPattern, canvasDimensions } = useStore();
     const patternColor = getPatternColor(canvasBackground);
+
+    // Use dynamic page height from store
+    const pageHeight = canvasDimensions.height;
 
     return (
         <svg
@@ -134,7 +136,7 @@ export default function BackgroundLayer({ totalHeight }: BackgroundLayerProps) {
                 <pattern
                     id="cornell"
                     width="100%"
-                    height={PAGE_HEIGHT}
+                    height={pageHeight}
                     patternUnits="userSpaceOnUse"
                 >
                     {/* Vertical cue column line at 200px */}
@@ -142,16 +144,16 @@ export default function BackgroundLayer({ totalHeight }: BackgroundLayerProps) {
                         x1="200"
                         y1="0"
                         x2="200"
-                        y2={PAGE_HEIGHT}
+                        y2={pageHeight}
                         stroke={patternColor}
                         strokeWidth="2"
                     />
                     {/* Horizontal summary line 200px from bottom */}
                     <line
                         x1="0"
-                        y1={PAGE_HEIGHT - 200}
+                        y1={pageHeight - 200}
                         x2="100%"
-                        y2={PAGE_HEIGHT - 200}
+                        y2={pageHeight - 200}
                         stroke={patternColor}
                         strokeWidth="2"
                     />

@@ -10,3 +10,6 @@ export const PAGE_WIDTH = 794;
 
 // A4 Height @ 96 DPI = 297mm = 11.69in × 96 = 1123px
 export const PAGE_HEIGHT = 1123;
+
+// Gap between PDF pages (visual separation)
+export const PDF_PAGE_GAP = 40;

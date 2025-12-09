@@ -8,7 +8,7 @@ import { getSvgPathFromStroke } from '@/utils/ink';
 import { getShapePoints, doesStrokeIntersectSelection, doesTextIntersectSelection, getStrokesBoundingBox, isPointInBBox } from '@/utils/geometry';
 import { useStore } from '@/store/useStore';
 import { Point, Stroke, CanvasImage } from '@/types';
-import { PAGE_HEIGHT, PAGE_WIDTH } from '@/constants/canvas';
+import { PAGE_HEIGHT, PAGE_WIDTH, PDF_PAGE_GAP } from '@/constants/canvas';
 import BackgroundLayer from './BackgroundLayer';
 import ObjectLayer from './ObjectLayer';
 import TextLayer from './TextLayer';
@@ -131,8 +131,10 @@ export default function Stage() {
     const [activeHandle, setActiveHandle] = useState<string | null>(null); // 'tl', 'tr', 'bl', 'br', or null
     const [dragStart, setDragStart] = useState<{ x: number; y: number; bbox?: { minX: number; minY: number; maxX: number; maxY: number } } | null>(null);
 
-    // Total canvas height (all pages) - uses dynamic page height
-    const totalHeight = pageHeight * pageCount;
+    // Total canvas height (all pages + gaps) - uses dynamic page height
+    // Each page has its height plus a gap after it (except the last page)
+    const singlePageTotal = pageHeight + PDF_PAGE_GAP;
+    const totalHeight = (pageHeight * pageCount) + (PDF_PAGE_GAP * (pageCount - 1));
 
     // Set page height on mount or when dimensions change (for export and other calculations)
     useEffect(() => {
@@ -237,34 +239,6 @@ export default function Stage() {
         ctx.fill(path);
     }, []);
 
-    // Draw page separators
-    const drawPageSeparators = useCallback((ctx: CanvasRenderingContext2D) => {
-        if (pageCount <= 1) return;
-
-        ctx.save();
-        ctx.setLineDash([10, 10]);
-        ctx.strokeStyle = '#3b82f6';
-        ctx.lineWidth = 2;
-        ctx.font = '14px Inter, system-ui, sans-serif';
-        ctx.fillStyle = '#3b82f6';
-
-        for (let i = 1; i < pageCount; i++) {
-            // Use dynamic page height for consistent page boundaries
-            const y = i * pageHeight;
-
-            // Draw dashed line
-            ctx.beginPath();
-            ctx.moveTo(0, y);
-            ctx.lineTo(pageWidth, y);
-            ctx.stroke();
-
-            // Draw page label
-            ctx.fillText(`Page ${i + 1}`, 20, y + 20);
-        }
-
-        ctx.restore();
-    }, [pageCount, pageWidth, pageHeight]);
-
     // Setup canvas with High-DPI scaling - MUST update on pageCount change
     const setupCanvas = useCallback((canvas: HTMLCanvasElement | null, forceRedraw: boolean = false) => {
         if (!canvas || totalHeight === 0) return null;
@@ -287,7 +261,7 @@ export default function Stage() {
         return ctx;
     }, [totalHeight, pixelRatio]);
 
-    // Render static layer (stroke history + page separators)
+    // Render static layer (stroke history)
     const renderStaticLayer = useCallback(() => {
         const canvas = staticLayerRef.current;
         if (!canvas || totalHeight === 0) return;
@@ -296,7 +270,7 @@ export default function Stage() {
         if (!ctx) return;
 
         // Resize canvas if needed
-        const targetWidth = PAGE_WIDTH * pixelRatio;
+        const targetWidth = pageWidth * pixelRatio;
         const targetHeight = totalHeight * pixelRatio;
 
         if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
@@ -306,15 +280,12 @@ export default function Stage() {
 
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.scale(pixelRatio, pixelRatio);
-        ctx.clearRect(0, 0, PAGE_WIDTH, totalHeight);
+        ctx.clearRect(0, 0, pageWidth, totalHeight);
 
         // Draw all strokes
         strokes.forEach((stroke) => drawStroke(ctx, stroke));
         ctx.globalCompositeOperation = 'source-over';
-
-        // Draw page separators on top
-        drawPageSeparators(ctx);
-    }, [totalHeight, pixelRatio, strokes, drawStroke, drawPageSeparators]);
+    }, [totalHeight, pixelRatio, strokes, drawStroke, pageWidth]);
 
     // Render active layer (current stroke or shape preview)
     // Account for barrel button override for visual feedback
@@ -991,14 +962,14 @@ export default function Stage() {
                         height: totalHeight,
                     }}
                 >
-                    {/* Scroll Snap Targets - invisible page markers */}
+                    {/* Scroll Snap Targets - invisible page markers with gaps */}
                     {Array.from({ length: pageCount }).map((_, i) => (
                         <div
                             key={`page-snap-${i}`}
                             className="page-snap"
                             style={{
                                 position: 'absolute',
-                                top: i * pageHeight,
+                                top: i * singlePageTotal,
                                 left: 0,
                                 width: '100%',
                                 height: pageHeight,
