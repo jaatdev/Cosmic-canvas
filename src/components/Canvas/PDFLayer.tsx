@@ -8,7 +8,8 @@ import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
 
 // Dynamically set the worker source to match the installed version
-pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
+// pdfjs-dist v5+ uses /legacy/build/ path for .js files
+pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/legacy/build/pdf.worker.min.mjs`;
 
 // Virtualization window: render pages within this range of current page
 // Increased buffer for smoother scrolling
@@ -31,7 +32,8 @@ export default function PDFLayer() {
         pageCount,
         currentPage,
         pdfPageMapping,
-        canvasDimensions
+        canvasDimensions,
+        hiddenPdfPages,
     } = useStore();
 
     const [isClient, setIsClient] = useState(false);
@@ -130,6 +132,24 @@ export default function PDFLayer() {
                 {effectiveMapping.map((pdfPageNumber, index) => {
                     const isInViewport = index >= minPage && index < maxPage;
                     const isFirstPage = index === 0;
+                    const isHidden = hiddenPdfPages.includes(index);
+
+                    // Hidden pages (unlocked to image) - render empty placeholder to maintain spacing
+                    if (isHidden) {
+                        return (
+                            <div
+                                key={`hidden_${index}`}
+                                style={{
+                                    position: 'absolute',
+                                    top: index * (pageHeight + PDF_PAGE_GAP),
+                                    left: 0,
+                                    width: pageWidth,
+                                    height: pageHeight,
+                                    // Transparent - the image on ObjectLayer will show instead
+                                }}
+                            />
+                        );
+                    }
 
                     // Placeholder for pages outside viewport (keeps scroll height correct)
                     if (!isInViewport) {

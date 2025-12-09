@@ -57,6 +57,7 @@ interface CanvasState {
     pdfFile: File | null;
     pdfPageMapping: number[];  // Maps canvas page index to PDF page number
     canvasDimensions: { width: number; height: number };  // Dynamic canvas size
+    hiddenPdfPages: number[];  // Page indexes where PDF background is hidden (unlocked)
 
     // Actions
     addStroke: (stroke: Omit<Stroke, 'id' | 'isEraser'>, forceEraser?: boolean, isShape?: boolean, isHighlighter?: boolean) => void;
@@ -117,6 +118,8 @@ interface CanvasState {
     setPdfFile: (file: File | null) => void;
     movePdfPage: (fromIndex: number, toIndex: number) => void;
     setCanvasDimensions: (width: number, height: number) => void;
+    hidePdfPage: (pageIndex: number) => void;
+    unhidePdfPage: (pageIndex: number) => void;
 
     // Computed helpers
     canUndo: () => boolean;
@@ -172,6 +175,7 @@ export const useStore = create<CanvasState>((set, get) => ({
     pdfFile: null,
     pdfPageMapping: [],  // Will be populated when PDF loads
     canvasDimensions: { width: 794, height: 1123 },  // Default A4
+    hiddenPdfPages: [],  // No hidden pages initially
 
     // Add stroke with unified history
     addStroke: (strokeData, forceEraser, isShape, isHighlighter) => {
@@ -1057,6 +1061,20 @@ export const useStore = create<CanvasState>((set, get) => ({
     setCanvasDimensions: (width, height) => set({
         canvasDimensions: { width, height }
     }),
+
+    // Hide PDF page (used when unlocking/detaching page to image)
+    hidePdfPage: (pageIndex) => {
+        const state = get();
+        if (!state.hiddenPdfPages.includes(pageIndex)) {
+            set({ hiddenPdfPages: [...state.hiddenPdfPages, pageIndex] });
+        }
+    },
+
+    // Unhide PDF page (for undo)
+    unhidePdfPage: (pageIndex) => {
+        const state = get();
+        set({ hiddenPdfPages: state.hiddenPdfPages.filter(p => p !== pageIndex) });
+    },
 
     // Computed helpers
     canUndo: () => get().historyStack.length > 0,
