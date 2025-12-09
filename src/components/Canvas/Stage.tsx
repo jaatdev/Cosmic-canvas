@@ -6,6 +6,7 @@ import { useWindowDimensions } from '@/hooks/useWindowDimensions';
 import getStroke from 'perfect-freehand';
 import { getSvgPathFromStroke } from '@/utils/ink';
 import { getShapePoints, doesStrokeIntersectSelection, doesTextIntersectSelection, getStrokesBoundingBox, isPointInBBox } from '@/utils/geometry';
+import { getPointerPosition } from '@/utils/canvasUtils';
 import { useStore } from '@/store/useStore';
 import { Point, Stroke, CanvasImage } from '@/types';
 import { PAGE_HEIGHT, PAGE_WIDTH, PDF_PAGE_GAP } from '@/constants/canvas';
@@ -140,6 +141,48 @@ export default function Stage() {
     useEffect(() => {
         setPageHeight(pageHeight);
     }, [setPageHeight, pageHeight]);
+
+    // DPI Lock: Enforce scaling on both canvases when dimensions change
+    // This ensures the Active Layer context never loses its scale transform
+    useEffect(() => {
+        const dpr = window.devicePixelRatio || 1;
+        const logicalWidth = pageWidth;
+        const logicalHeight = totalHeight;
+
+        // Setup Static Layer
+        if (staticLayerRef.current) {
+            const canvas = staticLayerRef.current;
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+                // Set physical dimensions
+                canvas.width = logicalWidth * dpr;
+                canvas.height = logicalHeight * dpr;
+                // Set CSS dimensions
+                canvas.style.width = `${logicalWidth}px`;
+                canvas.style.height = `${logicalHeight}px`;
+                // Apply DPI scale
+                ctx.setTransform(1, 0, 0, 1, 0, 0);
+                ctx.scale(dpr, dpr);
+            }
+        }
+
+        // Setup Active Layer (THE DPI FIX)
+        if (activeLayerRef.current) {
+            const canvas = activeLayerRef.current;
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+                // Set physical dimensions
+                canvas.width = logicalWidth * dpr;
+                canvas.height = logicalHeight * dpr;
+                // Set CSS dimensions explicitly
+                canvas.style.width = `${logicalWidth}px`;
+                canvas.style.height = `${logicalHeight}px`;
+                // CRITICAL: Apply DPI scale immediately
+                ctx.setTransform(1, 0, 0, 1, 0, 0);
+                ctx.scale(dpr, dpr);
+            }
+        }
+    }, [canvasDimensions, pageCount, pageWidth, totalHeight]);
 
     // Auto-fit zoom to fill screen width on mount
     useEffect(() => {
@@ -289,6 +332,7 @@ export default function Stage() {
 
     // Render active layer (current stroke or shape preview)
     // Account for barrel button override for visual feedback
+    // NUCLEAR DPI FIX: Force setTransform every frame to prevent scale corruption
     const renderActiveLayer = useCallback(() => {
         const canvas = activeLayerRef.current;
         if (!canvas || totalHeight === 0) return;
@@ -296,18 +340,27 @@ export default function Stage() {
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
 
-        // Resize canvas if needed
-        const targetWidth = PAGE_WIDTH * pixelRatio;
-        const targetHeight = totalHeight * pixelRatio;
+        // Get DPR directly from window for maximum reliability
+        const dpr = window.devicePixelRatio || 1;
+
+        // Resize canvas if needed (sets physical pixels)
+        const targetWidth = pageWidth * dpr;
+        const targetHeight = totalHeight * dpr;
 
         if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
             canvas.width = targetWidth;
             canvas.height = targetHeight;
+            // Set CSS dimensions explicitly
+            canvas.style.width = `${pageWidth}px`;
+            canvas.style.height = `${totalHeight}px`;
         }
 
-        ctx.setTransform(1, 0, 0, 1, 0, 0);
-        ctx.scale(pixelRatio, pixelRatio);
-        ctx.clearRect(0, 0, PAGE_WIDTH, totalHeight);
+        // NUCLEAR FIX: Force scale matrix immediately before drawing
+        // This ensures even if canvas resized between frames, we draw at HiDPI
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+        // Clear using logical dimensions (setTransform handles the scaling)
+        ctx.clearRect(0, 0, pageWidth, totalHeight);
 
         // Shape tool rendering - draw geometric shapes with crisp lines
         if (currentTool === 'shape' && shapeStartRef.current && currentPointsRef.current && currentPointsRef.current.length > 0) {
@@ -403,7 +456,7 @@ export default function Stage() {
                 ctx.stroke();
             });
         }
-    }, [totalHeight, pixelRatio, getCurrentStrokeSettings, drawStroke, isBarrelButtonDown, eraserWidth, currentTool, activeShape, penColor, penWidth, isShiftHeld, lassoPoints, selectedStrokeIds, strokes]);
+    }, [totalHeight, pageWidth, getCurrentStrokeSettings, drawStroke, isBarrelButtonDown, eraserWidth, currentTool, activeShape, penColor, penWidth, isShiftHeld, lassoPoints, selectedStrokeIds, strokes]);
 
     // Re-render static layer when stroke history or page count changes
     useEffect(() => {
@@ -575,11 +628,8 @@ export default function Stage() {
         // Strict palm rejection: only allow 'pen' or 'mouse', reject 'touch'
         if (e.pointerType !== 'pen' && e.pointerType !== 'mouse') return;
 
-        // Get canvas-relative coordinates using getBoundingClientRect
-        const rect = containerRef.current?.getBoundingClientRect();
-        if (!rect) return;
-        const x = (e.clientX - rect.left) / zoom;
-        const y = (e.clientY - rect.top) / zoom;
+        // Get canvas-relative coordinates using unified calculator
+        const { x, y } = getPointerPosition(e, activeLayerRef.current, zoom);
 
         // Lasso mode: Check for handle or bbox interaction
         if (currentTool === 'lasso' && selectedStrokeIds.length > 0) {
@@ -657,11 +707,8 @@ export default function Stage() {
         // Strict palm rejection: only allow 'pen' or 'mouse', reject 'touch'
         if (e.pointerType !== 'pen' && e.pointerType !== 'mouse') return;
 
-        // Get canvas-relative coordinates using getBoundingClientRect
-        const rect = containerRef.current?.getBoundingClientRect();
-        if (!rect) return;
-        const x = (e.clientX - rect.left) / zoom;
-        const y = (e.clientY - rect.top) / zoom;
+        // Get canvas-relative coordinates using unified calculator
+        const { x, y } = getPointerPosition(e, activeLayerRef.current, zoom);
 
         // Handle resizing via corner handles
         if (activeHandle && dragStart && dragStart.bbox) {
