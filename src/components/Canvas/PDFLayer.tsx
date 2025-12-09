@@ -79,7 +79,12 @@ export default function PDFLayer() {
     const handleLoadSuccess = ({ numPages }: { numPages: number }) => {
         console.log('PDF loaded successfully with', numPages, 'pages');
         setNumPages(numPages);
-        setPageCount(numPages);
+
+        // Only initialize store mapping if it's empty (first load)
+        // If we already have a mapping (e.g. from inserted pages), don't overwrite it!
+        if (pdfPageMapping.length === 0) {
+            setPageCount(numPages);
+        }
     };
 
     const handleLoadError = (error: Error) => {
@@ -163,6 +168,23 @@ export default function PDFLayer() {
                                     width: pageWidth,
                                     height: pageHeight,
                                     backgroundColor: 'rgba(255,255,255,0.02)',
+                                }}
+                            />
+                        );
+                    }
+
+                    // Blank Page (Hybrid PDF) - render nothing (BackgroundLayer shows border/pattern)
+                    if (pdfPageNumber === null) {
+                        return (
+                            <div
+                                key={`blank_${index}`}
+                                style={{
+                                    position: 'absolute',
+                                    top: index * (pageHeight + PDF_PAGE_GAP),
+                                    left: 0,
+                                    width: pageWidth,
+                                    height: pageHeight,
+                                    // Transparent - BackgroundLayer handles visual
                                 }}
                             />
                         );

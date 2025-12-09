@@ -1,15 +1,10 @@
 import { jsPDF } from 'jspdf';
 import getStroke from 'perfect-freehand';
 import { getSvgPathFromStroke } from './ink';
-import { Stroke, CanvasImage, Pattern } from '@/types';
+import { Stroke, CanvasImage, Pattern, ExportConfig } from '@/types';
 import { PAGE_WIDTH, PAGE_HEIGHT, PDF_PAGE_GAP } from '@/constants/canvas';
 
-interface ExportConfig {
-    projectName: string;
-    background: string;
-    pattern: Pattern;
-    pageCount: number;
-}
+
 
 // perfect-freehand options
 const getStrokeOptions = (size: number) => ({

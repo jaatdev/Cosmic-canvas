@@ -128,6 +128,7 @@ export default function Toolbar() {
         highlighterWidth,
         setHighlighterColor,
         setHighlighterWidth,
+        pdfPageMapping,
     } = useStore();
 
     const penColorRef = useRef<HTMLInputElement>(null);
@@ -222,13 +223,14 @@ export default function Toolbar() {
                 background: canvasBackground,
                 pattern: canvasPattern,
                 projectName: projectName || 'Untitled Universe',
+                pdfPageMapping,
             });
         } catch (err) {
             console.error('Export error:', err);
         } finally {
             setIsExporting(false);
         }
-    }, [isExporting, strokes, images, pageCount, canvasBackground, canvasPattern, projectName]);
+    }, [isExporting, strokes, images, pageCount, canvasBackground, canvasPattern, projectName, pdfPageMapping]);
 
     // Image upload handler - centers on current page
     const handleImageUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {

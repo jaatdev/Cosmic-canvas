@@ -2,6 +2,7 @@
 
 import { useStore } from '@/store/useStore';
 import { Pattern } from '@/types';
+import { PDF_PAGE_GAP } from '@/constants/canvas';
 
 interface BackgroundLayerProps {
     totalHeight?: number;
@@ -32,7 +33,7 @@ function getPatternColor(backgroundColor: string): string {
  * Supports grid, dots, ruled lines, isometric, music staves, and Cornell notes.
  */
 export default function BackgroundLayer({ totalHeight }: BackgroundLayerProps) {
-    const { canvasBackground, canvasPattern, canvasDimensions } = useStore();
+    const { canvasBackground, canvasPattern, canvasDimensions, pageCount } = useStore();
     const patternColor = getPatternColor(canvasBackground);
 
     // Use dynamic page height from store
@@ -160,13 +161,31 @@ export default function BackgroundLayer({ totalHeight }: BackgroundLayerProps) {
                 </pattern>
             </defs>
 
-            {/* Background color fill */}
-            <rect width="100%" height="100%" fill={canvasBackground} />
+            {/* Render Page Backgrounds and Borders */}
+            {Array.from({ length: pageCount }).map((_, i) => {
+                const y = i * (pageHeight + PDF_PAGE_GAP);
+                return (
+                    <g key={i} transform={`translate(0, ${y})`}>
+                        {/* Background Color */}
+                        <rect width="100%" height={pageHeight} fill={canvasBackground} />
 
-            {/* Pattern overlay */}
-            {canvasPattern !== 'none' && (
-                <rect width="100%" height="100%" fill={`url(#${canvasPattern})`} />
-            )}
+                        {/* Pattern Overlay */}
+                        {canvasPattern !== 'none' && (
+                            <rect width="100%" height={pageHeight} fill={`url(#${canvasPattern})`} />
+                        )}
+
+                        {/* Page Border */}
+                        <rect
+                            width="100%"
+                            height={pageHeight}
+                            fill="none"
+                            stroke="rgba(150, 150, 150, 0.3)"
+                            strokeWidth="1"
+                            pointerEvents="none"
+                        />
+                    </g>
+                );
+            })}
         </svg>
     );
 }

@@ -55,7 +55,7 @@ interface CanvasState {
 
     // PDF Viewer
     pdfFile: File | null;
-    pdfPageMapping: number[];  // Maps canvas page index to PDF page number
+    pdfPageMapping: (number | null)[];  // Maps canvas page index to PDF page number (null = blank page)
     canvasDimensions: { width: number; height: number };  // Dynamic canvas size
     hiddenPdfPages: number[];  // Page indexes where PDF background is hidden (unlocked)
 
@@ -662,10 +662,15 @@ export const useStore = create<CanvasState>((set, get) => ({
             return img;
         });
 
+        // Update PDF page mapping - insert null (blank page) at position
+        const newMapping = [...state.pdfPageMapping];
+        newMapping.splice(pageIndex + 1, 0, null);
+
         set({
             pageCount: state.pageCount + 1,
             strokes: newStrokes,
             images: newImages,
+            pdfPageMapping: newMapping,
             historyStack: [
                 ...state.historyStack,
                 {
@@ -720,10 +725,15 @@ export const useStore = create<CanvasState>((set, get) => ({
                 return img;
             });
 
+        // Update PDF page mapping - remove slot at pageIndex
+        const newMapping = [...state.pdfPageMapping];
+        newMapping.splice(pageIndex, 1);
+
         set({
             pageCount: state.pageCount - 1,
             strokes: newStrokes,
             images: newImages,
+            pdfPageMapping: newMapping,
             historyStack: [
                 ...state.historyStack,
                 {
@@ -1090,7 +1100,11 @@ export const useStore = create<CanvasState>((set, get) => ({
     },
 
     // PDF Viewer
-    setPdfFile: (file) => set({ pdfFile: file }),
+    setPdfFile: (file) => set({
+        pdfFile: file,
+        pdfPageMapping: [], // Reset mapping -> PDFLayer will initialize it
+        hiddenPdfPages: [], // Reset hidden pages
+    }),
 
     // Move PDF page (reorder mapping without moving ink)
     movePdfPage: (fromIndex, toIndex) => {

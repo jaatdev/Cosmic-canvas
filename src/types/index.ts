@@ -52,6 +52,15 @@ export interface TextNode {
     padding: number;
 }
 
+// Export Configuration
+export interface ExportConfig {
+    pageCount: number;
+    projectName: string;
+    background: string;
+    pattern: Pattern;
+    pdfPageMapping?: (number | null)[];
+}
+
 // Unified timeline action types
 export type PageAction = {
     type: 'page_op';
