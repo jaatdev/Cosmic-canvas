@@ -34,8 +34,10 @@ import {
     AlignJustify,
     Layout,
     FileX2,
-    Highlighter
+    Highlighter,
+    BookOpen
 } from 'lucide-react';
+import Link from 'next/link';
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { Pattern } from '@/types';
 
@@ -998,6 +1000,14 @@ export default function Toolbar() {
                 >
                     <FileX2 className="w-6 h-6 text-white/60 hover:text-red-400" />
                 </button>
+
+                <Link
+                    href="/pdf-viewer"
+                    className="p-3 rounded-xl bg-white/5 hover:bg-purple-500/20 hover:scale-110 transition-all"
+                    title="Open PDF"
+                >
+                    <BookOpen className="w-6 h-6 text-white/60 hover:text-purple-400" />
+                </Link>
             </div>
         </div>
     );

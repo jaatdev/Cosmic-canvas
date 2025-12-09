@@ -53,6 +53,10 @@ interface CanvasState {
     canvasBackground: string;
     canvasPattern: Pattern;
 
+    // PDF Viewer
+    pdfFile: File | null;
+    pdfPageMapping: number[];  // Maps canvas page index to PDF page number
+
     // Actions
     addStroke: (stroke: Omit<Stroke, 'id' | 'isEraser'>, forceEraser?: boolean, isShape?: boolean, isHighlighter?: boolean) => void;
     addImage: (image: CanvasImage) => void;
@@ -68,6 +72,7 @@ interface CanvasState {
     setTool: (tool: Tool) => void;
     setProjectName: (name: string) => void;
     addPage: () => void;
+    setPageCount: (count: number) => void;
     setCurrentPage: (page: number) => void;
     insertPageAfter: (pageIndex: number) => void;
     deletePage: (pageIndex: number) => void;
@@ -106,6 +111,10 @@ interface CanvasState {
     loadProject: () => Promise<void>;
     resetProject: () => Promise<void>;
     getPersistedState: () => PersistedState;
+
+    // PDF Viewer
+    setPdfFile: (file: File | null) => void;
+    movePdfPage: (fromIndex: number, toIndex: number) => void;
 
     // Computed helpers
     canUndo: () => boolean;
@@ -156,6 +165,10 @@ export const useStore = create<CanvasState>((set, get) => ({
     // Lasso selection - empty by default
     selectedStrokeIds: [],
     selectedTextIds: [],
+
+    // PDF Viewer
+    pdfFile: null,
+    pdfPageMapping: [],  // Will be populated when PDF loads
 
     // Add stroke with unified history
     addStroke: (strokeData, forceEraser, isShape, isHighlighter) => {
@@ -698,6 +711,16 @@ export const useStore = create<CanvasState>((set, get) => ({
         set((state) => ({ pageCount: state.pageCount + 1 }));
     },
 
+    // Set page count directly (used for PDF import)
+    // Also initializes the PDF page mapping to [1, 2, 3, ..., count]
+    setPageCount: (count) => {
+        const validCount = Math.max(1, count);
+        set({
+            pageCount: validCount,
+            pdfPageMapping: Array.from({ length: validCount }, (_, i) => i + 1),
+        });
+    },
+
     // Set page height (called once on mount)
     setPageHeight: (height) => set({ pageHeight: height }),
 
@@ -999,6 +1022,24 @@ export const useStore = create<CanvasState>((set, get) => ({
             activeFont: state.activeFont,
             activeFontSize: state.activeFontSize,
         };
+    },
+
+    // PDF Viewer
+    setPdfFile: (file) => set({ pdfFile: file }),
+
+    // Move PDF page (reorder mapping without moving ink)
+    movePdfPage: (fromIndex, toIndex) => {
+        const state = get();
+        const mapping = [...state.pdfPageMapping];
+
+        if (fromIndex < 0 || fromIndex >= mapping.length) return;
+        if (toIndex < 0 || toIndex >= mapping.length) return;
+
+        // Remove from old position and insert at new position
+        const [movedPage] = mapping.splice(fromIndex, 1);
+        mapping.splice(toIndex, 0, movedPage);
+
+        set({ pdfPageMapping: mapping });
     },
 
     // Computed helpers

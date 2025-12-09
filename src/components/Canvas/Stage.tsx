@@ -1,6 +1,7 @@
 'use client';
 
 import { useRef, useEffect, useState, useCallback } from 'react';
+import dynamic from 'next/dynamic';
 import { useWindowDimensions } from '@/hooks/useWindowDimensions';
 import getStroke from 'perfect-freehand';
 import { getSvgPathFromStroke } from '@/utils/ink';
@@ -13,6 +14,9 @@ import ObjectLayer from './ObjectLayer';
 import TextLayer from './TextLayer';
 import LassoLayer from './LassoLayer';
 import { saveState } from '@/utils/storage';
+
+// Dynamic import for PDFLayer to avoid SSR issues (DOMMatrix not available on server)
+const PDFLayer = dynamic(() => import('./PDFLayer'), { ssr: false });
 
 // perfect-freehand options for gel pen feel
 const getStrokeOptions = (size: number) => ({
@@ -1002,6 +1006,9 @@ export default function Stage() {
 
                     {/* Z-Index 0: Background */}
                     <BackgroundLayer totalHeight={totalHeight} />
+
+                    {/* Z-Index 1: PDF Pages (sits under ink) */}
+                    <PDFLayer />
 
                     {/* Z-Index 5: Images */}
                     <ObjectLayer totalHeight={totalHeight} />
