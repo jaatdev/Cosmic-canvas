@@ -56,6 +56,7 @@ interface CanvasState {
     // PDF Viewer
     pdfFile: File | null;
     pdfPageMapping: number[];  // Maps canvas page index to PDF page number
+    canvasDimensions: { width: number; height: number };  // Dynamic canvas size
 
     // Actions
     addStroke: (stroke: Omit<Stroke, 'id' | 'isEraser'>, forceEraser?: boolean, isShape?: boolean, isHighlighter?: boolean) => void;
@@ -115,6 +116,7 @@ interface CanvasState {
     // PDF Viewer
     setPdfFile: (file: File | null) => void;
     movePdfPage: (fromIndex: number, toIndex: number) => void;
+    setCanvasDimensions: (width: number, height: number) => void;
 
     // Computed helpers
     canUndo: () => boolean;
@@ -169,6 +171,7 @@ export const useStore = create<CanvasState>((set, get) => ({
     // PDF Viewer
     pdfFile: null,
     pdfPageMapping: [],  // Will be populated when PDF loads
+    canvasDimensions: { width: 794, height: 1123 },  // Default A4
 
     // Add stroke with unified history
     addStroke: (strokeData, forceEraser, isShape, isHighlighter) => {
@@ -1041,6 +1044,11 @@ export const useStore = create<CanvasState>((set, get) => ({
 
         set({ pdfPageMapping: mapping });
     },
+
+    // Set canvas dimensions (used when PDF loads)
+    setCanvasDimensions: (width, height) => set({
+        canvasDimensions: { width, height }
+    }),
 
     // Computed helpers
     canUndo: () => get().historyStack.length > 0,

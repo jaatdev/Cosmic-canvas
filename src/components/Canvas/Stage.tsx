@@ -97,6 +97,7 @@ export default function Stage() {
         canvasPattern,
         highlighterColor,
         highlighterWidth,
+        canvasDimensions,
         addStroke,
         addImage,
         selectImage,
@@ -113,6 +114,10 @@ export default function Stage() {
         redo
     } = useStore();
 
+    // Dynamic page dimensions from store (or defaults)
+    const pageWidth = canvasDimensions.width;
+    const pageHeight = canvasDimensions.height;
+
     // Local drawing state
     const [isDrawing, setIsDrawing] = useState(false);
     const [isBarrelButtonDown, setIsBarrelButtonDown] = useState(false);
@@ -126,13 +131,13 @@ export default function Stage() {
     const [activeHandle, setActiveHandle] = useState<string | null>(null); // 'tl', 'tr', 'bl', 'br', or null
     const [dragStart, setDragStart] = useState<{ x: number; y: number; bbox?: { minX: number; minY: number; maxX: number; maxY: number } } | null>(null);
 
-    // Total canvas height (all pages) - uses FIXED PAGE_HEIGHT
-    const totalHeight = PAGE_HEIGHT * pageCount;
+    // Total canvas height (all pages) - uses dynamic page height
+    const totalHeight = pageHeight * pageCount;
 
-    // Set fixed page height on mount (for export and other calculations)
+    // Set page height on mount or when dimensions change (for export and other calculations)
     useEffect(() => {
-        setPageHeight(PAGE_HEIGHT);
-    }, [setPageHeight]);
+        setPageHeight(pageHeight);
+    }, [setPageHeight, pageHeight]);
 
     // Auto-fit zoom to fill screen width on mount
     useEffect(() => {
@@ -244,13 +249,13 @@ export default function Stage() {
         ctx.fillStyle = '#3b82f6';
 
         for (let i = 1; i < pageCount; i++) {
-            // Use fixed PAGE_HEIGHT for consistent page boundaries
-            const y = i * PAGE_HEIGHT;
+            // Use dynamic page height for consistent page boundaries
+            const y = i * pageHeight;
 
             // Draw dashed line
             ctx.beginPath();
             ctx.moveTo(0, y);
-            ctx.lineTo(PAGE_WIDTH, y);
+            ctx.lineTo(pageWidth, y);
             ctx.stroke();
 
             // Draw page label
@@ -258,7 +263,7 @@ export default function Stage() {
         }
 
         ctx.restore();
-    }, [pageCount]);
+    }, [pageCount, pageWidth, pageHeight]);
 
     // Setup canvas with High-DPI scaling - MUST update on pageCount change
     const setupCanvas = useCallback((canvas: HTMLCanvasElement | null, forceRedraw: boolean = false) => {
@@ -441,8 +446,8 @@ export default function Stage() {
 
         img.onload = () => {
             // Calculate smart scale dimensions
-            const maxWidth = Math.min(600, PAGE_WIDTH * 0.8);
-            const maxHeight = PAGE_HEIGHT * 0.6;
+            const maxWidth = Math.min(600, pageWidth * 0.8);
+            const maxHeight = pageHeight * 0.6;
             const aspectRatio = img.naturalWidth / img.naturalHeight;
 
             let scaledWidth = maxWidth;
@@ -454,13 +459,13 @@ export default function Stage() {
             }
 
             // Page-relative positioning: center on current page
-            // X: Center of A4 paper width
-            const x = (PAGE_WIDTH / 2) - (scaledWidth / 2);
+            // X: Center of paper width
+            const x = (pageWidth / 2) - (scaledWidth / 2);
 
             // Y: Center of the current page
             // currentPage is 1-based (1, 2, 3...)
-            const pageTopY = (currentPage - 1) * PAGE_HEIGHT;
-            const y = pageTopY + (PAGE_HEIGHT / 2) - (scaledHeight / 2);
+            const pageTopY = (currentPage - 1) * pageHeight;
+            const y = pageTopY + (pageHeight / 2) - (scaledHeight / 2);
 
             const canvasImage: CanvasImage = {
                 id: generateId(),
@@ -954,12 +959,12 @@ export default function Stage() {
                 overflow: 'auto',
             }}
         >
-            {/* The Paper - fixed A4 width, centered */}
+            {/* The Paper - dynamic width based on PDF */}
             <div
                 ref={containerRef}
                 style={{
                     position: 'relative',
-                    width: PAGE_WIDTH * zoom,
+                    width: pageWidth * zoom,
                     height: totalHeight * zoom,
                     minHeight: '100vh',
                     flexShrink: 0,
@@ -982,7 +987,7 @@ export default function Stage() {
                     style={{
                         transform: `scale(${zoom})`,
                         transformOrigin: 'top left',
-                        width: PAGE_WIDTH,
+                        width: pageWidth,
                         height: totalHeight,
                     }}
                 >
@@ -993,10 +998,10 @@ export default function Stage() {
                             className="page-snap"
                             style={{
                                 position: 'absolute',
-                                top: i * PAGE_HEIGHT,
+                                top: i * pageHeight,
                                 left: 0,
                                 width: '100%',
-                                height: PAGE_HEIGHT,
+                                height: pageHeight,
                                 scrollSnapAlign: 'start',
                                 scrollSnapStop: 'always',
                                 pointerEvents: 'none',
