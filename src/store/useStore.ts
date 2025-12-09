@@ -59,12 +59,17 @@ interface CanvasState {
     canvasDimensions: { width: number; height: number };  // Dynamic canvas size
     hiddenPdfPages: number[];  // Page indexes where PDF background is hidden (unlocked)
 
+    // Clipboard
+    clipboard: CanvasImage | null;
+
     // Actions
     addStroke: (stroke: Omit<Stroke, 'id' | 'isEraser'>, forceEraser?: boolean, isShape?: boolean, isHighlighter?: boolean) => void;
     addImage: (image: CanvasImage) => void;
     selectImage: (id: string | null) => void;
     updateImage: (id: string, updates: Partial<CanvasImage>) => void;
     deleteSelectedImage: () => void;
+    copyImage: () => void;
+    pasteImage: () => void;
     addTextNode: (node: TextNode) => void;
     updateTextNode: (id: string, updates: Partial<TextNode>) => void;
     deleteTextNode: (id: string) => void;
@@ -177,6 +182,9 @@ export const useStore = create<CanvasState>((set, get) => ({
     canvasDimensions: { width: 794, height: 1123 },  // Default A4
     hiddenPdfPages: [],  // No hidden pages initially
 
+    // Clipboard
+    clipboard: null,
+
     // Add stroke with unified history
     addStroke: (strokeData, forceEraser, isShape, isHighlighter) => {
         const state = get();
@@ -254,6 +262,48 @@ export const useStore = create<CanvasState>((set, get) => ({
             redoStack: [],
             selectedImageId: null,
             currentTool: 'select',  // Keep user in select mode
+        });
+    },
+
+    // Copy selected image to clipboard
+    copyImage: () => {
+        const state = get();
+        if (!state.selectedImageId) return;
+
+        const imageToCopy = state.images.find(img => img.id === state.selectedImageId);
+        if (!imageToCopy) return;
+
+        // Deep clone the image (excluding id which will be regenerated on paste)
+        set({ clipboard: { ...imageToCopy } });
+    },
+
+    // Paste image from clipboard to center of current page
+    pasteImage: () => {
+        const state = get();
+        if (!state.clipboard) return;
+
+        // Clone the image
+        const newImg: CanvasImage = { ...state.clipboard };
+
+        // Generate new unique ID
+        newImg.id = crypto.randomUUID();
+
+        // Calculate center of current page
+        const pageWidth = state.canvasDimensions.width;
+        const pageHeight = state.canvasDimensions.height;
+        const pageTop = (state.currentPage - 1) * (pageHeight + PDF_PAGE_GAP);
+
+        // Center the image on the current page
+        newImg.x = (pageWidth / 2) - (newImg.width / 2);
+        newImg.y = pageTop + (pageHeight / 2) - (newImg.height / 2);
+
+        // Add to store and select
+        set({
+            images: [...state.images, newImg],
+            historyStack: [...state.historyStack, { type: 'image', data: newImg }],
+            redoStack: [],
+            selectedImageId: newImg.id,
+            currentTool: 'select',
         });
     },
 

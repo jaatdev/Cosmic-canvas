@@ -2,7 +2,7 @@
 
 import { useStore } from '@/store/useStore';
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { Trash2 } from 'lucide-react';
+import { Trash2, Copy, CopyPlus } from 'lucide-react';
 
 interface ObjectLayerProps {
     totalHeight?: number;
@@ -26,7 +26,7 @@ type DragState = {
  * When select tool is active, images can be moved and resized.
  */
 export default function ObjectLayer({ totalHeight }: ObjectLayerProps) {
-    const { images, currentTool, selectedImageId, selectImage, updateImage, deleteSelectedImage } = useStore();
+    const { images, currentTool, selectedImageId, selectImage, updateImage, deleteSelectedImage, copyImage, pasteImage } = useStore();
     const [dragState, setDragState] = useState<DragState>({
         type: 'none',
         startX: 0,
@@ -40,18 +40,31 @@ export default function ObjectLayer({ totalHeight }: ObjectLayerProps) {
 
     const isSelectMode = currentTool === 'select';
 
-    // Keyboard listener for Delete/Backspace to delete selected image
+    // Keyboard listener for Delete/Backspace and Copy/Paste
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
+            // Delete selected image
             if ((e.key === 'Delete' || e.key === 'Backspace') && selectedImageId) {
                 e.preventDefault();
                 deleteSelectedImage();
+            }
+
+            // Copy (Ctrl+C / Cmd+C)
+            if ((e.ctrlKey || e.metaKey) && e.key === 'c' && selectedImageId) {
+                e.preventDefault();
+                copyImage();
+            }
+
+            // Paste (Ctrl+V / Cmd+V)
+            if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
+                e.preventDefault();
+                pasteImage();
             }
         };
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [selectedImageId, deleteSelectedImage]);
+    }, [selectedImageId, deleteSelectedImage, copyImage, pasteImage]);
 
     // Handle clicking on an image to select it
     const handleImageClick = useCallback((e: React.MouseEvent, imgId: string) => {
@@ -66,6 +79,22 @@ export default function ObjectLayer({ totalHeight }: ObjectLayerProps) {
         e.preventDefault();
         deleteSelectedImage();
     }, [deleteSelectedImage]);
+
+    // Handle copy button click
+    const handleCopyClick = useCallback((e: React.MouseEvent) => {
+        e.stopPropagation();
+        e.preventDefault();
+        copyImage();
+    }, [copyImage]);
+
+    // Handle duplicate (copy + immediate paste with offset)
+    const handleDuplicateClick = useCallback((e: React.MouseEvent) => {
+        e.stopPropagation();
+        e.preventDefault();
+        copyImage();
+        // Small delay to ensure clipboard is set, then paste
+        setTimeout(() => pasteImage(), 10);
+    }, [copyImage, pasteImage]);
 
     // Start moving an image
     const handleMoveStart = useCallback((e: React.PointerEvent, img: typeof images[0]) => {
@@ -229,29 +258,75 @@ export default function ObjectLayer({ totalHeight }: ObjectLayerProps) {
                         {/* Selection Gizmo */}
                         {isSelected && isSelectMode && (
                             <>
-                                {/* Delete Button - Top Right */}
-                                <button
-                                    onClick={handleDeleteClick}
-                                    style={{
-                                        position: 'absolute',
-                                        top: -12,
-                                        right: -12,
-                                        width: 24,
-                                        height: 24,
-                                        backgroundColor: '#ef4444',
-                                        border: '2px solid white',
-                                        borderRadius: '50%',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        cursor: 'pointer',
-                                        boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
-                                        zIndex: 10,
-                                    }}
-                                    title="Delete Image (Del)"
-                                >
-                                    <Trash2 size={12} color="white" />
-                                </button>
+                                {/* Action Buttons - Top Row */}
+                                <div style={{
+                                    position: 'absolute',
+                                    top: -12,
+                                    right: -12,
+                                    display: 'flex',
+                                    gap: 4,
+                                    zIndex: 10,
+                                }}>
+                                    {/* Copy Button */}
+                                    <button
+                                        onClick={handleCopyClick}
+                                        style={{
+                                            width: 24,
+                                            height: 24,
+                                            backgroundColor: '#3b82f6',
+                                            border: '2px solid white',
+                                            borderRadius: '50%',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            cursor: 'pointer',
+                                            boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                                        }}
+                                        title="Copy (Ctrl+C)"
+                                    >
+                                        <Copy size={12} color="white" />
+                                    </button>
+
+                                    {/* Duplicate Button */}
+                                    <button
+                                        onClick={handleDuplicateClick}
+                                        style={{
+                                            width: 24,
+                                            height: 24,
+                                            backgroundColor: '#10b981',
+                                            border: '2px solid white',
+                                            borderRadius: '50%',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            cursor: 'pointer',
+                                            boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                                        }}
+                                        title="Duplicate"
+                                    >
+                                        <CopyPlus size={12} color="white" />
+                                    </button>
+
+                                    {/* Delete Button */}
+                                    <button
+                                        onClick={handleDeleteClick}
+                                        style={{
+                                            width: 24,
+                                            height: 24,
+                                            backgroundColor: '#ef4444',
+                                            border: '2px solid white',
+                                            borderRadius: '50%',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            cursor: 'pointer',
+                                            boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                                        }}
+                                        title="Delete (Del)"
+                                    >
+                                        <Trash2 size={12} color="white" />
+                                    </button>
+                                </div>
 
                                 {/* Corner Resize Handles */}
                                 {(['nw', 'ne', 'sw', 'se'] as const).map((handle) => {
