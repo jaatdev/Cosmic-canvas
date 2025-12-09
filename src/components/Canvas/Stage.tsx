@@ -112,7 +112,8 @@ export default function Stage() {
         loadProject,
         getPersistedState,
         undo,
-        redo
+        redo,
+        setCurrentPage,
     } = useStore();
 
     // Dynamic page dimensions from store (or defaults)
@@ -136,6 +137,33 @@ export default function Stage() {
     // Each page has its height plus a gap after it (except the last page)
     const singlePageTotal = pageHeight + PDF_PAGE_GAP;
     const totalHeight = (pageHeight * pageCount) + (PDF_PAGE_GAP * (pageCount - 1));
+
+    // Scroll Listener for Page Counter (Immersion Lock Fix)
+    useEffect(() => {
+        const handleScroll = () => {
+            const { canvasDimensions, pageCount, setCurrentPage } = useStore.getState(); // Get FRESH state
+
+            const gap = PDF_PAGE_GAP;
+            const singlePageHeight = canvasDimensions.height + gap;
+
+            // Calculate based on the center of the viewport
+            const centerLine = window.scrollY + (window.innerHeight / 2);
+
+            // Math.max ensures we never show Page 0
+            // Math.min ensures we never show Page 11 if only 10 pages exist
+            // Using Math.floor to get 0-based index then +1 for 1-based display
+            let current = Math.floor(centerLine / singlePageHeight) + 1;
+            current = Math.max(1, Math.min(pageCount, current));
+
+            setCurrentPage(current);
+        };
+
+        window.addEventListener('scroll', handleScroll, { passive: true });
+        // Trigger once on mount to ensure correct initial state
+        handleScroll();
+
+        return () => window.removeEventListener('scroll', handleScroll);
+    }, []);
 
     // Set page height on mount or when dimensions change (for export and other calculations)
     useEffect(() => {

@@ -137,7 +137,8 @@ export default function PDFLayer() {
                 {effectiveMapping.map((pdfPageNumber, index) => {
                     const isInViewport = index >= minPage && index < maxPage;
                     const isFirstPage = index === 0;
-                    const isHidden = hiddenPdfPages.includes(index);
+                    // Hidden pages check must use the actual PDF page number (from mapping), not the view index
+                    const isHidden = pdfPageNumber !== null && hiddenPdfPages.includes(pdfPageNumber);
 
                     // Hidden pages (unlocked to image) - render empty placeholder to maintain spacing
                     if (isHidden) {

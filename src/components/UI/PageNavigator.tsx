@@ -17,6 +17,7 @@ export default function PageNavigator() {
         setCanvasDimensions,
         hidePdfPage,
         canvasDimensions,
+        pdfPageMapping,
     } = useStore();
 
     const [isLoading, setIsLoading] = useState(false);
@@ -26,23 +27,36 @@ export default function PageNavigator() {
     };
 
     const handleUnlock = async () => {
-        if (!pdfFile) return;
+        // 1. LOOKUP: Find the ACTUAL PDF page index at this location
+        const mappingIndex = currentPage - 1;
+        // If mapping is empty (no PDF loaded or not initialized?), fallback to simple index?
+        // But logic says pdfFile must exist. mapping should be populated.
+        // pdfPageMapping contains 1-based page numbers or null.
+        const pdfPageIndex = pdfPageMapping.length > 0 ? pdfPageMapping[mappingIndex] : (mappingIndex + 1);
+
+        // Safety Checks
+        if (!pdfFile || pdfPageIndex === null || pdfPageIndex === undefined) {
+            console.warn("No PDF page content found at this location to unlock.");
+            return;
+        }
+
         setIsLoading(true);
 
         try {
-            // 1. Render Image (returns coordinates relative to page top)
-            const img = await renderPdfPageToImage(pdfFile, currentPage - 1);
+            // 2. Render Image (returns coordinates relative to page top)
+            // renderPdfPageToImage expects 0-based index. pdfPageIndex is 1-based.
+            const img = await renderPdfPageToImage(pdfFile, pdfPageIndex - 1);
 
-            // 2. Adjust Y coordinate for the current page
-            // The utility gave us Y relative to 0. We need Y relative to Page Top.
+            // 3. Adjust Y coordinate for the current page
             const pageHeight = useStore.getState().canvasDimensions.height;
-            const pageTop = (currentPage - 1) * (pageHeight + PDF_PAGE_GAP);
+            // Use mappingIndex (view position) for Y calculation
+            const pageTop = mappingIndex * (pageHeight + PDF_PAGE_GAP);
             img.y += pageTop;
 
-            // 3. Update Store
+            // 4. Update Store
             setCanvasDimensions(794, 1123); // Reset to A4
             addImage(img);
-            hidePdfPage(currentPage - 1); // 0-based index for consistency
+            hidePdfPage(pdfPageIndex); // Store the PDF Page Number (1-based)
             selectImage(img.id); // Auto-select
 
         } catch (e) {
@@ -80,14 +94,14 @@ export default function PageNavigator() {
                         onClick={handleUnlock}
                         disabled={isLoading}
                         className={`p-1 rounded-full transition-colors ${isLoading
-                                ? 'opacity-50 cursor-wait'
-                                : 'hover:bg-white/10'
+                            ? 'opacity-50 cursor-wait'
+                            : 'hover:bg-white/10'
                             }`}
                         title="Unlock Page (Detach PDF to Image)"
                     >
                         <Unlock className={`w-4 h-4 ${isLoading
-                                ? 'text-white/30 animate-pulse'
-                                : 'text-white/60 hover:text-white'
+                            ? 'text-white/30 animate-pulse'
+                            : 'text-white/60 hover:text-white'
                             }`} />
                     </button>
                 </>
