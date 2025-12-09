@@ -1,6 +1,6 @@
 'use client';
 
-import { useStore, CanvasImage, ShapeType } from '@/store/useStore';
+import { useStore, CanvasImage, ShapeType, Pattern } from '@/store/useStore';
 import { exportToPdf } from '@/utils/export';
 import { PAGE_HEIGHT, PAGE_WIDTH } from '@/constants/canvas';
 import {
@@ -35,11 +35,11 @@ import {
     Layout,
     FileX2,
     Highlighter,
-    BookOpen
+    BookOpen,
+    LayoutGrid
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRef, useState, useEffect, useCallback } from 'react';
-import { Pattern } from '@/types';
 
 type ActivePanel = 'none' | 'pen' | 'eraser' | 'bg' | 'zoom' | 'shape' | 'text' | 'highlighter';
 
@@ -130,6 +130,7 @@ export default function Toolbar() {
         setHighlighterWidth,
         pdfPageMapping,
         fitToScreen,
+        setIsGridView,
     } = useStore();
 
     const penColorRef = useRef<HTMLInputElement>(null);
@@ -968,17 +969,28 @@ export default function Toolbar() {
                     <ZoomIn className={`w-6 h-6 ${activePanel === 'zoom' ? 'text-white' : 'text-white/60'}`} />
                 </button>
 
-                <button
-                    onClick={toggleFullscreen}
-                    className="p-3 rounded-xl bg-white/5 hover:bg-white/15 
+                {/* Grid View Logic Included Here */}
+                <div className="flex items-center gap-1 pl-4 border-l border-white/10">
+                    <button
+                        onClick={() => setIsGridView(true)}
+                        className="p-3 text-white/50 hover:text-blue-400 hover:bg-white/5 rounded-xl transition-all"
+                        title="Grid View (Navigate)"
+                    >
+                        <LayoutGrid className="w-5 h-5" />
+                    </button>
+
+                    <button
+                        onClick={toggleFullscreen}
+                        className="p-3 rounded-xl bg-white/5 hover:bg-white/15 
                         transition-all hover:scale-110"
-                    title={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
-                >
-                    {isFullscreen
-                        ? <Minimize className="w-6 h-6 text-white/60" />
-                        : <Maximize className="w-6 h-6 text-white/60" />
-                    }
-                </button>
+                        title={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
+                    >
+                        {isFullscreen
+                            ? <Minimize className="w-6 h-6 text-white/60" />
+                            : <Maximize className="w-6 h-6 text-white/60" />
+                        }
+                    </button>
+                </div>
 
                 <button
                     onClick={handleExport}

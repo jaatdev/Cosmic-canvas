@@ -23,6 +23,7 @@ interface CanvasState {
     pageHeight: number;
     zoom: number;
     isFullscreen: boolean;
+    isGridView: boolean;
 
     // Separate widths for pen and eraser
     penColor: string;
@@ -91,6 +92,7 @@ interface CanvasState {
     resetZoom: () => void;
     fitToScreen: () => void;
     setIsFullscreen: (value: boolean) => void;
+    setIsGridView: (value: boolean) => void;
     setPenColor: (color: string) => void;
     setPenWidth: (width: number) => void;
     setEraserWidth: (width: number) => void;
@@ -143,9 +145,10 @@ export const useStore = create<CanvasState>((set, get) => ({
     projectName: 'Untitled Universe',
     pageCount: 1,
     currentPage: 1,
-    pageHeight: 0,
+    pageHeight: 1123,
     zoom: 1,
     isFullscreen: false,
+    isGridView: false,
 
     // Separate widths - Dark Slate Aesthetic
     penColor: '#d7d5d5',     // Light Grey (silver ink)
@@ -813,6 +816,7 @@ export const useStore = create<CanvasState>((set, get) => ({
 
     // Fullscreen / Zen Mode
     setIsFullscreen: (value) => set({ isFullscreen: value }),
+    setIsGridView: (value) => set({ isGridView: value }),
 
     // Pen settings
     setPenColor: (color) => set({ penColor: color }),

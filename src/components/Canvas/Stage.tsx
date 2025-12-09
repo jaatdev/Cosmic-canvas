@@ -14,6 +14,7 @@ import BackgroundLayer from './BackgroundLayer';
 import ObjectLayer from './ObjectLayer';
 import TextLayer from './TextLayer';
 import LassoLayer from './LassoLayer';
+import GridView from '../UI/GridView';
 import { saveState } from '@/utils/storage';
 
 // Dynamic import for PDFLayer to avoid SSR issues (DOMMatrix not available on server)
@@ -141,10 +142,11 @@ export default function Stage() {
     // Scroll Listener for Page Counter (Immersion Lock Fix)
     useEffect(() => {
         const handleScroll = () => {
-            const { canvasDimensions, pageCount, setCurrentPage } = useStore.getState(); // Get FRESH state
+            // STOP updating state if Grid is open
+            if (useStore.getState().isGridView) return;
 
-            const gap = PDF_PAGE_GAP;
-            const singlePageHeight = canvasDimensions.height + gap;
+            // Calculate which page we're looking at using the center of the viewport + the gap
+            const singlePageHeight = pageHeight + PDF_PAGE_GAP;
 
             // Calculate based on the center of the viewport
             const centerLine = window.scrollY + (window.innerHeight / 2);
@@ -1081,6 +1083,7 @@ export default function Stage() {
                         ref={activeLayerRef}
                         style={{ ...canvasStyle, zIndex: 20, pointerEvents: 'none' }}
                     />
+                    <GridView />
                 </div>
             </div>
         </div>
