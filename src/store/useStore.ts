@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { Point, Stroke, Tool, Pattern, CanvasImage, ActionItem, ShapeType, TextNode } from '@/types';
-import { PAGE_WIDTH } from '@/constants/canvas';
+import { PAGE_WIDTH, PDF_PAGE_GAP } from '@/constants/canvas';
 import { loadState, saveState, clearState, PersistedState } from '@/utils/storage';
 
 // Re-export types for convenience
@@ -583,7 +583,10 @@ export const useStore = create<CanvasState>((set, get) => ({
     // Insert a blank page after the specified page index
     insertPageAfter: (pageIndex) => {
         const state = get();
-        const insertThreshold = (pageIndex + 1) * state.pageHeight;
+        // Calculate threshold including gaps between pages
+        const singlePageTotal = state.pageHeight + PDF_PAGE_GAP;
+        const insertThreshold = (pageIndex + 1) * singlePageTotal;
+        const shiftAmount = singlePageTotal; // Shift by page height + gap
 
         // Shift strokes
         const newStrokes = state.strokes.map(stroke => {
@@ -591,7 +594,7 @@ export const useStore = create<CanvasState>((set, get) => ({
             if (stroke.points[0].y > insertThreshold) {
                 return {
                     ...stroke,
-                    points: stroke.points.map(p => ({ ...p, y: p.y + state.pageHeight }))
+                    points: stroke.points.map(p => ({ ...p, y: p.y + shiftAmount }))
                 };
             }
             return stroke;
@@ -600,7 +603,7 @@ export const useStore = create<CanvasState>((set, get) => ({
         // Shift images
         const newImages = state.images.map(img => {
             if (img.y > insertThreshold) {
-                return { ...img, y: img.y + state.pageHeight };
+                return { ...img, y: img.y + shiftAmount };
             }
             return img;
         });
@@ -626,8 +629,11 @@ export const useStore = create<CanvasState>((set, get) => ({
         const state = get();
         if (state.pageCount <= 1) return; // Prevent deleting the last page
 
-        const topThreshold = pageIndex * state.pageHeight;
-        const bottomThreshold = (pageIndex + 1) * state.pageHeight;
+        // Calculate thresholds including gaps between pages
+        const singlePageTotal = state.pageHeight + PDF_PAGE_GAP;
+        const topThreshold = pageIndex * singlePageTotal;
+        const bottomThreshold = topThreshold + state.pageHeight; // Only page content, not gap
+        const shiftAmount = singlePageTotal; // Shift by page height + gap
 
         // Find content to delete (centrally located or starting within page)
         const strokesToDelete = state.strokes.filter(s =>
@@ -645,7 +651,7 @@ export const useStore = create<CanvasState>((set, get) => ({
                 if (s.points[0].y >= bottomThreshold) {
                     return {
                         ...s,
-                        points: s.points.map(p => ({ ...p, y: p.y - state.pageHeight }))
+                        points: s.points.map(p => ({ ...p, y: p.y - shiftAmount }))
                     };
                 }
                 return s;
@@ -655,7 +661,7 @@ export const useStore = create<CanvasState>((set, get) => ({
             .filter(img => !(img.y >= topThreshold && img.y < bottomThreshold))
             .map(img => {
                 if (img.y >= bottomThreshold) {
-                    return { ...img, y: img.y - state.pageHeight };
+                    return { ...img, y: img.y - shiftAmount };
                 }
                 return img;
             });

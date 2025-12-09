@@ -2,7 +2,7 @@ import { jsPDF } from 'jspdf';
 import getStroke from 'perfect-freehand';
 import { getSvgPathFromStroke } from './ink';
 import { Stroke, CanvasImage, Pattern } from '@/types';
-import { PAGE_WIDTH, PAGE_HEIGHT } from '@/constants/canvas';
+import { PAGE_WIDTH, PAGE_HEIGHT, PDF_PAGE_GAP } from '@/constants/canvas';
 
 interface ExportConfig {
     projectName: string;
@@ -219,7 +219,8 @@ export const exportToPdf = async (
 
     // Process each page
     for (let pageIndex = 0; pageIndex < pageCount; pageIndex++) {
-        const pageY = pageIndex * PAGE_HEIGHT;
+        // Canvas Y position includes gaps between pages
+        const pageY = pageIndex * (PAGE_HEIGHT + PDF_PAGE_GAP);
 
         // Add new page if not first
         if (pageIndex > 0) {

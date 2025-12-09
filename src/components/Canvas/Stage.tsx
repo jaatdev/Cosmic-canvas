@@ -433,9 +433,9 @@ export default function Stage() {
             // X: Center of paper width
             const x = (pageWidth / 2) - (scaledWidth / 2);
 
-            // Y: Center of the current page
+            // Y: Center of the current page (accounting for gaps)
             // currentPage is 1-based (1, 2, 3...)
-            const pageTopY = (currentPage - 1) * pageHeight;
+            const pageTopY = (currentPage - 1) * singlePageTotal;
             const y = pageTopY + (pageHeight / 2) - (scaledHeight / 2);
 
             const canvasImage: CanvasImage = {
