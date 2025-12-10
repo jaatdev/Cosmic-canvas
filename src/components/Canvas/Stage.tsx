@@ -109,7 +109,8 @@ export default function Stage() {
         transformStrokes,
         clearStrokeSelection,
         setPageHeight,
-        fitToScreen,
+        setCanvasDimensions,
+        setZoom,
         loadProject,
         getPersistedState,
         undo,
@@ -214,10 +215,23 @@ export default function Stage() {
         }
     }, [canvasDimensions, pageCount, pageWidth, totalHeight]);
 
-    // Auto-fit zoom to fill screen width on mount
+    // Screen-Fit Geometry (Slide Deck Mode)
+    // Set canvas to exact screen size on mount
     useEffect(() => {
-        fitToScreen();
-    }, [fitToScreen]);
+        // 1. Measure the Screen
+        const width = window.innerWidth;
+        const height = window.innerHeight;
+
+        // 2. Set Canvas to Match Screen
+        setCanvasDimensions(width, height);
+
+        // 3. Set Zoom to 1 (Exact Fit)
+        setZoom(1);
+
+        // 4. Force Re-render of Active Layer (DPI Fix)
+        // The DPI fix in the useEffect at line 177 will handle this automatically
+        // when canvasDimensions changes
+    }, [setCanvasDimensions, setZoom]);
 
     // Hydration: Load saved project on mount
     useEffect(() => {

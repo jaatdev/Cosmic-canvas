@@ -182,7 +182,7 @@ export const useStore = create<CanvasState>((set, get) => ({
     // PDF Viewer
     pdfFile: null,
     pdfPageMapping: [],  // Will be populated when PDF loads
-    canvasDimensions: { width: 794, height: 1123 },  // Default A4
+    canvasDimensions: { width: 0, height: 0 },  // Will be set to screen size on mount
     hiddenPdfPages: [],  // No hidden pages initially
 
     // Clipboard
