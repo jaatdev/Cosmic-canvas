@@ -56,9 +56,14 @@ export default function ObjectLayer({ totalHeight }: ObjectLayerProps) {
             }
 
             // Paste (Ctrl+V / Cmd+V)
+            // Only handle internal clipboard (from copyImage), let external clipboard pass through
             if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
-                e.preventDefault();
-                pasteImage();
+                const hasInternalClipboard = useStore.getState().clipboard !== null;
+                if (hasInternalClipboard) {
+                    e.preventDefault(); // Only prevent if internal clipboard exists
+                    pasteImage();
+                }
+                // If no internal clipboard, don't prevent default - let Stage.tsx handle external paste
             }
         };
 
