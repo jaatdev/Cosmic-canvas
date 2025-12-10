@@ -251,27 +251,31 @@ export default function Toolbar() {
             const img = new Image();
 
             img.onload = () => {
-                // Smart scaling
+                // 1. Get Dynamic Dimensions (The actual screen size captured in Step 41)
+                const { currentPage, canvasDimensions, addImage } = useStore.getState();
+
+                // 2. Smart Scaling (Max 50% of screen width)
+                const maxW = canvasDimensions.width * 0.5;
                 const aspectRatio = img.naturalWidth / img.naturalHeight;
-                const maxWidth = Math.min(600, PAGE_WIDTH * 0.8);
-                const maxHeight = PAGE_HEIGHT * 0.6;
+                let width = img.naturalWidth;
+                let height = img.naturalHeight;
 
-                let width = maxWidth;
-                let height = width / aspectRatio;
-
-                if (height > maxHeight) {
-                    height = maxHeight;
-                    width = height * aspectRatio;
+                if (width > maxW) {
+                    width = maxW;
+                    height = maxW / aspectRatio;
                 }
 
-                // Page-relative positioning: center on current page
-                // X: Center of A4 paper width
-                const x = (PAGE_WIDTH / 2) - (width / 2);
+                // 3. DYNAMIC CENTER X
+                // Use canvasDimensions.width, NOT the A4 constant
+                const x = (canvasDimensions.width / 2) - (width / 2);
 
-                // Y: Center of the current page
-                // currentPage is 1-based (1, 2, 3...)
-                const pageTopY = (currentPage - 1) * PAGE_HEIGHT;
-                const y = pageTopY + (PAGE_HEIGHT / 2) - (height / 2);
+                // 4. DYNAMIC CENTER Y
+                // Use canvasDimensions.height
+                const gap = 20; // PDF_PAGE_GAP
+                const singlePageHeight = canvasDimensions.height + gap;
+                const pageTop = (currentPage - 1) * singlePageHeight;
+
+                const y = pageTop + (canvasDimensions.height / 2) - (height / 2);
 
                 const canvasImage: CanvasImage = {
                     id: generateId(),
@@ -292,7 +296,7 @@ export default function Toolbar() {
 
         reader.readAsDataURL(file);
         e.target.value = '';
-    }, [addImage, currentPage]);
+    }, []);
 
     // Delete Page Handler
     const handleDeletePage = useCallback(() => {

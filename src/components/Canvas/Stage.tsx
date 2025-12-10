@@ -513,35 +513,39 @@ export default function Stage() {
         const img = new Image();
 
         img.onload = () => {
-            // Calculate smart scale dimensions
-            const maxWidth = Math.min(600, pageWidth * 0.8);
-            const maxHeight = pageHeight * 0.6;
+            // 1. Get Dynamic Dimensions (The actual screen size captured in Step 41)
+            const { currentPage, canvasDimensions, addImage } = useStore.getState();
+
+            // 2. Smart Scaling (Max 50% of screen width)
+            const maxW = canvasDimensions.width * 0.5;
             const aspectRatio = img.naturalWidth / img.naturalHeight;
+            let width = img.naturalWidth;
+            let height = img.naturalHeight;
 
-            let scaledWidth = maxWidth;
-            let scaledHeight = scaledWidth / aspectRatio;
-
-            if (scaledHeight > maxHeight) {
-                scaledHeight = maxHeight;
-                scaledWidth = scaledHeight * aspectRatio;
+            if (width > maxW) {
+                width = maxW;
+                height = maxW / aspectRatio;
             }
 
-            // Page-relative positioning: center on current page
-            // X: Center of paper width
-            const x = (pageWidth / 2) - (scaledWidth / 2);
+            // 3. DYNAMIC CENTER X
+            // Use canvasDimensions.width, NOT the A4 constant
+            const x = (canvasDimensions.width / 2) - (width / 2);
 
-            // Y: Center of the current page (accounting for gaps)
-            // currentPage is 1-based (1, 2, 3...)
-            const pageTopY = (currentPage - 1) * singlePageTotal;
-            const y = pageTopY + (pageHeight / 2) - (scaledHeight / 2);
+            // 4. DYNAMIC CENTER Y
+            // Use canvasDimensions.height
+            const gap = PDF_PAGE_GAP;
+            const singlePageHeight = canvasDimensions.height + gap;
+            const pageTop = (currentPage - 1) * singlePageHeight;
+
+            const y = pageTop + (canvasDimensions.height / 2) - (height / 2);
 
             const canvasImage: CanvasImage = {
                 id: generateId(),
                 url,
                 x,
                 y,
-                width: scaledWidth,
-                height: scaledHeight,
+                width,
+                height,
                 naturalWidth: img.naturalWidth,
                 naturalHeight: img.naturalHeight,
             };
@@ -550,7 +554,7 @@ export default function Stage() {
         };
 
         img.src = url;
-    }, [addImage, currentPage]);
+    }, []);
 
     // Paste event handler
     useEffect(() => {
