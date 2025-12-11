@@ -590,33 +590,79 @@ export default function Stage() {
         img.src = url;
     }, []);
 
-    // Paste event handler (OS Clipboard Priority)
+    // Paste event handler (The Clipboard Arbiter)
     useEffect(() => {
         const handlePaste = async (e: ClipboardEvent) => {
-            // 1. CHECK OS CLIPBOARD FIRST (Priority)
+            // 1. PRIORITY CHECK: OS CLIPBOARD
             const items = e.clipboardData?.items;
-            let handled = false;
+            let osImageFound = false;
 
             if (items) {
-                for (const item of Array.from(items)) {
-                    if (item.type.startsWith('image/')) {
-                        e.preventDefault();
-                        handled = true;
+                for (let i = 0; i < items.length; i++) {
+                    const item = items[i];
+                    if (item.type.indexOf('image') !== -1) {
+                        // FOUND SNIPPET!
+                        e.preventDefault(); // Stop browser default
+                        osImageFound = true;
+
                         const blob = item.getAsFile();
-                        if (blob) {
-                            processImageBlob(blob);
-                        }
-                        return; // Exit immediately after pasting snippet
+                        if (!blob) return;
+
+                        const url = URL.createObjectURL(blob);
+                        const img = new Image();
+                        img.src = url;
+
+                        img.onload = () => {
+                            // --- GET FRESH STATE ---
+                            const { canvasDimensions, addImage, zoom } = useStore.getState();
+                            const scrollTop = window.scrollY;
+                            const clientHeight = window.innerHeight;
+
+                            // --- SMART SCALING ---
+                            const aspectRatio = img.naturalWidth / img.naturalHeight;
+                            let width = img.naturalWidth;
+                            let height = img.naturalHeight;
+                            if (width > 600) {
+                                width = 600;
+                                height = 600 / aspectRatio;
+                            }
+
+                            // --- VIEWPORT ANCHOR LOGIC ---
+                            // X: Center of Paper
+                            const x = (canvasDimensions.width / 2) - (width / 2);
+
+                            // Y: Center of VISIBLE SCREEN (Accounting for Zoom)
+                            // Convert ScrollTop to Physics Units first
+                            const scrollYPhysics = scrollTop / zoom;
+                            const viewportHeightPhysics = clientHeight / zoom;
+
+                            const y = scrollYPhysics + (viewportHeightPhysics / 2) - (height / 2);
+
+                            // --- ADD TO UNIVERSE ---
+                            addImage({
+                                id: crypto.randomUUID(),
+                                url,
+                                x,
+                                y,
+                                width,
+                                height,
+                                naturalWidth: img.naturalWidth,
+                                naturalHeight: img.naturalHeight,
+                            });
+                        };
+
+                        // CRITICAL: Exit the function. Do not check internal clipboard.
+                        return;
                     }
                 }
             }
 
-            // 2. IF NO OS IMAGE, CHECK INTERNAL CLIPBOARD
-            if (!handled) {
-                // Check store for internal clipboard (copied canvas objects)
+            // 2. FALLBACK: INTERNAL CLIPBOARD
+            // Only runs if NO OS image was found in the loop above
+            if (!osImageFound) {
                 const { clipboard, pasteImage } = useStore.getState();
                 if (clipboard) {
-                    e.preventDefault(); // Now we block default
+                    e.preventDefault();
                     pasteImage(); // Paste the internal object
                 }
             }
@@ -624,7 +670,7 @@ export default function Stage() {
 
         window.addEventListener('paste', handlePaste);
         return () => window.removeEventListener('paste', handlePaste);
-    }, [processImageBlob]);
+    }, []);
 
     // Full-page scroll: One wheel tick = one page jump (like PowerPoint/notebook)
     // Uses FIXED PAGE_HEIGHT for consistent scrolling
