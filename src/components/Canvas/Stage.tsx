@@ -215,23 +215,28 @@ export default function Stage() {
         }
     }, [canvasDimensions, pageCount, pageWidth, totalHeight]);
 
-    // Screen-Fit Geometry (Slide Deck Mode)
-    // Set canvas to exact screen size on mount
+    // Screen-Fit Geometry (Slide Deck Mode) + Dynamic Fullscreen Resizer
+    // Set canvas to exact screen size on mount and on resize
     useEffect(() => {
-        // 1. Measure the Screen
-        const width = window.innerWidth;
-        const height = window.innerHeight;
+        const handleResize = () => {
+            const width = window.innerWidth;
+            const height = window.innerHeight;
 
-        // 2. Set Canvas to Match Screen
-        setCanvasDimensions(width, height);
+            // 1. Update Store Dimensions (Triggers re-render of Page Gaps/Layout)
+            useStore.getState().setCanvasDimensions(width, height);
 
-        // 3. Set Zoom to 1 (Exact Fit)
-        setZoom(1);
+            // 2. Reset Zoom to 1 (Since we are 1:1 with screen)
+            useStore.getState().setZoom(1);
+        };
 
-        // 4. Force Re-render of Active Layer (DPI Fix)
-        // The DPI fix in the useEffect at line 177 will handle this automatically
-        // when canvasDimensions changes
-    }, [setCanvasDimensions, setZoom]);
+        // Initial Call
+        handleResize();
+
+        // Listen for Resize (Direct for snappier response)
+        window.addEventListener('resize', handleResize);
+
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
 
     // Hydration: Load saved project on mount
     useEffect(() => {
