@@ -140,17 +140,26 @@ export default function Stage() {
     const singlePageTotal = pageHeight + PDF_PAGE_GAP;
     const totalHeight = (pageHeight * pageCount) + (PDF_PAGE_GAP * (pageCount - 1));
 
-    // Scroll Listener for Page Counter (Immersion Lock Fix)
+    // Scroll Listener for Page Counter (Monitor Lock Fix)
     useEffect(() => {
         const handleScroll = () => {
             // STOP updating state if Grid is open
             if (useStore.getState().isGridView) return;
 
-            // Calculate which page we're looking at using the center of the viewport + the gap
-            const singlePageHeight = pageHeight + PDF_PAGE_GAP;
+            const { canvasDimensions, zoom } = useStore.getState();
 
-            // Calculate based on the center of the viewport
-            const centerLine = window.scrollY + (window.innerHeight / 2);
+            // SCROLL PHYSICS: When content is zoomed, scrollY represents SCALED pixels
+            // We need to convert to "Internal Physics Units" (the locked monitor dimensions)
+            const scrollTop = window.scrollY;
+            const internalScrollY = scrollTop / zoom;
+
+            // Calculate using locked canvas dimensions
+            const gap = PDF_PAGE_GAP;
+            const singlePageHeight = canvasDimensions.height + gap;
+
+            // Calculate based on the center of the viewport (converted to internal units)
+            const viewportCenterOffset = (window.innerHeight / 2) / zoom;
+            const centerLine = internalScrollY + viewportCenterOffset;
 
             // Math.max ensures we never show Page 0
             // Math.min ensures we never show Page 11 if only 10 pages exist
@@ -166,7 +175,7 @@ export default function Stage() {
         handleScroll();
 
         return () => window.removeEventListener('scroll', handleScroll);
-    }, []);
+    }, [pageCount, setCurrentPage]);
 
     // Set page height on mount or when dimensions change (for export and other calculations)
     useEffect(() => {
@@ -215,24 +224,38 @@ export default function Stage() {
         }
     }, [canvasDimensions, pageCount, pageWidth, totalHeight]);
 
-    // Screen-Fit Geometry (Slide Deck Mode) + Dynamic Fullscreen Resizer
-    // Set canvas to exact screen size on mount and on resize
+    // THE MONITOR LOCK (Stable Slide Architecture)
+    // Lock canvas dimensions to physical monitor size, use ZOOM to fit into window
     useEffect(() => {
-        const handleResize = () => {
-            const width = window.innerWidth;
-            const height = window.innerHeight;
+        const initDimensions = () => {
+            // LOCK to the physical monitor size (e.g., 1920x1080)
+            // This ensures "Fullscreen" is the Native 1:1 state
+            const maxWidth = window.screen.width;
+            const maxHeight = window.screen.height;
 
-            // 1. Update Store Dimensions (Triggers re-render of Page Gaps/Layout)
-            useStore.getState().setCanvasDimensions(width, height);
-
-            // 2. Reset Zoom to 1 (Since we are 1:1 with screen)
-            useStore.getState().setZoom(1);
+            useStore.getState().setCanvasDimensions(maxWidth, maxHeight);
         };
 
-        // Initial Call
+        const handleResize = () => {
+            const { canvasDimensions } = useStore.getState();
+            if (canvasDimensions.height === 0) return; // Not ready
+
+            // Calculate Scale needed to fit the Big Canvas into the Small Window
+            // We fit by Height to ensure "Single Page View" without scrolling
+            const scaleHeight = window.innerHeight / canvasDimensions.height;
+            const scaleWidth = window.innerWidth / canvasDimensions.width;
+
+            // Use the smaller scale to ensure it fits entirely
+            const newZoom = Math.min(scaleHeight, scaleWidth);
+
+            useStore.getState().setZoom(newZoom);
+        };
+
+        // Initial: Lock dimensions first, then calculate zoom
+        initDimensions();
         handleResize();
 
-        // Listen for Resize (Direct for snappier response)
+        // Listen for Resize (zoom adjusts, dimensions stay locked)
         window.addEventListener('resize', handleResize);
 
         return () => window.removeEventListener('resize', handleResize);
