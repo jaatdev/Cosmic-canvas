@@ -140,34 +140,35 @@ export default function Stage() {
     const singlePageTotal = pageHeight + PDF_PAGE_GAP;
     const totalHeight = (pageHeight * pageCount) + (PDF_PAGE_GAP * (pageCount - 1));
 
-    // Scroll Listener for Page Counter (Monitor Lock Fix)
+    // Scroll Listener for Page Counter (Stability Patch)
     useEffect(() => {
         const handleScroll = () => {
             // STOP updating state if Grid is open
             if (useStore.getState().isGridView) return;
 
-            const { canvasDimensions, zoom } = useStore.getState();
+            const { canvasDimensions, zoom, pageCount } = useStore.getState();
 
-            // SCROLL PHYSICS: When content is zoomed, scrollY represents SCALED pixels
-            // We need to convert to "Internal Physics Units" (the locked monitor dimensions)
+            // 1. Get Visual Scroll Position
             const scrollTop = window.scrollY;
+
+            // 2. Convert to Internal Physics Units
+            // If the content inside is scaled, scroll height is scaled. Divide by zoom.
             const internalScrollY = scrollTop / zoom;
 
-            // Calculate using locked canvas dimensions
+            // 3. Page Height (Physics)
             const gap = PDF_PAGE_GAP;
             const singlePageHeight = canvasDimensions.height + gap;
 
-            // Calculate based on the center of the viewport (converted to internal units)
-            const viewportCenterOffset = (window.innerHeight / 2) / zoom;
-            const centerLine = internalScrollY + viewportCenterOffset;
+            // 4. Calculate Center Line (Where is the user looking?)
+            // We look at the middle of the viewport (also unzoomed)
+            const viewportMiddle = (window.innerHeight / zoom) / 2;
+            const targetY = internalScrollY + viewportMiddle;
 
-            // Math.max ensures we never show Page 0
-            // Math.min ensures we never show Page 11 if only 10 pages exist
-            // Using Math.floor to get 0-based index then +1 for 1-based display
-            let current = Math.floor(centerLine / singlePageHeight) + 1;
+            // 5. Derive Page
+            let current = Math.floor(targetY / singlePageHeight) + 1;
             current = Math.max(1, Math.min(pageCount, current));
 
-            setCurrentPage(current);
+            useStore.getState().setCurrentPage(current);
         };
 
         window.addEventListener('scroll', handleScroll, { passive: true });
@@ -175,7 +176,7 @@ export default function Stage() {
         handleScroll();
 
         return () => window.removeEventListener('scroll', handleScroll);
-    }, [pageCount, setCurrentPage]);
+    }, [pageCount]);
 
     // Set page height on mount or when dimensions change (for export and other calculations)
     useEffect(() => {
@@ -584,20 +585,34 @@ export default function Stage() {
         img.src = url;
     }, []);
 
-    // Paste event handler
+    // Paste event handler (OS Clipboard Priority)
     useEffect(() => {
-        const handlePaste = (e: ClipboardEvent) => {
+        const handlePaste = async (e: ClipboardEvent) => {
+            // 1. CHECK OS CLIPBOARD FIRST (Priority)
             const items = e.clipboardData?.items;
-            if (!items) return;
+            let handled = false;
 
-            for (const item of Array.from(items)) {
-                if (item.type.startsWith('image/')) {
-                    e.preventDefault();
-                    const blob = item.getAsFile();
-                    if (blob) {
-                        processImageBlob(blob);
+            if (items) {
+                for (const item of Array.from(items)) {
+                    if (item.type.startsWith('image/')) {
+                        e.preventDefault();
+                        handled = true;
+                        const blob = item.getAsFile();
+                        if (blob) {
+                            processImageBlob(blob);
+                        }
+                        return; // Exit immediately after pasting snippet
                     }
-                    break;
+                }
+            }
+
+            // 2. IF NO OS IMAGE, CHECK INTERNAL CLIPBOARD
+            if (!handled) {
+                // Check store for internal clipboard (copied canvas objects)
+                const { clipboard, pasteImage } = useStore.getState();
+                if (clipboard) {
+                    e.preventDefault(); // Now we block default
+                    pasteImage(); // Paste the internal object
                 }
             }
         };

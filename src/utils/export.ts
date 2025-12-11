@@ -2,7 +2,8 @@ import { jsPDF } from 'jspdf';
 import getStroke from 'perfect-freehand';
 import { getSvgPathFromStroke } from './ink';
 import { Stroke, CanvasImage, Pattern, ExportConfig } from '@/types';
-import { PAGE_WIDTH, PAGE_HEIGHT, PDF_PAGE_GAP } from '@/constants/canvas';
+import { PDF_PAGE_GAP } from '@/constants/canvas';
+import { useStore } from '@/store/useStore';
 
 
 
@@ -193,7 +194,7 @@ const loadImageWithFormat = async (url: string): Promise<{ img: HTMLImageElement
 };
 
 /**
- * Export canvas content to multi-page A4 PDF
+ * Export canvas content to multi-page PDF with dynamic screen dimensions
  * 
  * CRITICAL: Images are added directly to PDF (not rasterized through canvas)
  * to preserve original quality.
@@ -205,21 +206,26 @@ export const exportToPdf = async (
 ): Promise<void> => {
     const { pageCount, projectName, background, pattern } = config;
 
-    // Create PDF with A4 dimensions
+    // Get dynamic canvas dimensions from store
+    const { canvasDimensions } = useStore.getState();
+    const pageWidth = canvasDimensions.width;
+    const pageHeight = canvasDimensions.height;
+
+    // Create PDF with dynamic dimensions (matches screen size)
     const pdf = new jsPDF({
-        orientation: 'portrait',
+        orientation: canvasDimensions.width > canvasDimensions.height ? 'landscape' : 'portrait',
         unit: 'px',
-        format: [PAGE_WIDTH, PAGE_HEIGHT],
+        format: [pageWidth, pageHeight], // EXACT MATCH to screen
     });
 
     // Process each page
     for (let pageIndex = 0; pageIndex < pageCount; pageIndex++) {
         // Canvas Y position includes gaps between pages
-        const pageY = pageIndex * (PAGE_HEIGHT + PDF_PAGE_GAP);
+        const pageY = pageIndex * (pageHeight + PDF_PAGE_GAP);
 
         // Add new page if not first
         if (pageIndex > 0) {
-            pdf.addPage([PAGE_WIDTH, PAGE_HEIGHT], 'portrait');
+            pdf.addPage([pageWidth, pageHeight], canvasDimensions.width > canvasDimensions.height ? 'landscape' : 'portrait');
         }
 
         // Layer 1: Background color
@@ -228,17 +234,17 @@ export const exportToPdf = async (
         const g = parseInt(bgHex.substr(2, 2), 16) || 255;
         const b = parseInt(bgHex.substr(4, 2), 16) || 255;
         pdf.setFillColor(r, g, b);
-        pdf.rect(0, 0, PAGE_WIDTH, PAGE_HEIGHT, 'F');
+        pdf.rect(0, 0, pageWidth, pageHeight, 'F');
 
         // Layer 2: Pattern
-        drawPatternOnPdf(pdf, pattern, PAGE_WIDTH, PAGE_HEIGHT, background);
+        drawPatternOnPdf(pdf, pattern, pageWidth, pageHeight, background);
 
         // Layer 3: Images (DIRECT to PDF for quality preservation)
         for (const img of images) {
             const imgTop = img.y;
             const imgBottom = img.y + img.height;
             const pageTop = pageY;
-            const pageBottom = pageY + PAGE_HEIGHT;
+            const pageBottom = pageY + pageHeight;
 
             if (imgBottom > pageTop && imgTop < pageBottom) {
                 try {
@@ -260,8 +266,8 @@ export const exportToPdf = async (
 
         // Layer 4: Ink strokes (rasterize only the ink, not images)
         const inkCanvas = document.createElement('canvas');
-        inkCanvas.width = PAGE_WIDTH * 2; // 2x for quality
-        inkCanvas.height = PAGE_HEIGHT * 2;
+        inkCanvas.width = pageWidth * 2; // 2x for quality
+        inkCanvas.height = pageHeight * 2;
         const ctx = inkCanvas.getContext('2d');
 
         if (ctx) {
@@ -272,7 +278,7 @@ export const exportToPdf = async (
                 const strokeMinY = Math.min(...stroke.points.map(p => p.y));
                 const strokeMaxY = Math.max(...stroke.points.map(p => p.y));
 
-                if (strokeMaxY > pageY && strokeMinY < pageY + PAGE_HEIGHT) {
+                if (strokeMaxY > pageY && strokeMinY < pageY + pageHeight) {
                     drawStroke(ctx, stroke, pageY);
                 }
             }
@@ -280,7 +286,7 @@ export const exportToPdf = async (
 
             // Add ink layer as overlay
             const inkData = inkCanvas.toDataURL('image/png');
-            pdf.addImage(inkData, 'PNG', 0, 0, PAGE_WIDTH, PAGE_HEIGHT);
+            pdf.addImage(inkData, 'PNG', 0, 0, pageWidth, pageHeight);
         }
     }
 
