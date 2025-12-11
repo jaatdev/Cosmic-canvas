@@ -27,36 +27,50 @@ export default function PageNavigator() {
     };
 
     const handleUnlock = async () => {
-        // 1. LOOKUP: Find the ACTUAL PDF page index at this location
-        const mappingIndex = currentPage - 1;
-        // If mapping is empty (no PDF loaded or not initialized?), fallback to simple index?
-        // But logic says pdfFile must exist. mapping should be populated.
-        // pdfPageMapping contains 1-based page numbers or null.
-        const pdfPageIndex = pdfPageMapping.length > 0 ? pdfPageMapping[mappingIndex] : (mappingIndex + 1);
+        const { currentPage, pdfPageMapping, pdfFile, addImage, setCanvasDimensions, hidePdfPage, selectImage, canvasDimensions } = useStore.getState();
 
-        // Safety Checks
-        if (!pdfFile || pdfPageIndex === null || pdfPageIndex === undefined) {
-            console.warn("No PDF page content found at this location to unlock.");
+        // 1. Convert 1-based Page to 0-based Index
+        const mapIndex = currentPage - 1;
+
+        // 2. Safety Check: Bounds validation
+        if (mapIndex < 0 || mapIndex >= pdfPageMapping.length) {
+            console.error("Unlock Error: Page index out of bounds", { currentPage, mapIndex, mappingLength: pdfPageMapping.length });
+            alert("Cannot unlock: Page index out of bounds.");
+            return;
+        }
+
+        // 3. Get PDF Page Index (1-based from mapping)
+        const pdfPageIndex = pdfPageMapping[mapIndex];
+
+        // 4. Check if it is a PDF page (not null/blank)
+        if (pdfPageIndex === null || pdfPageIndex === undefined) {
+            alert("This is already a blank page.");
+            return;
+        }
+
+        // 5. Validate PDF file exists
+        if (!pdfFile) {
+            console.warn("No PDF file loaded.");
+            alert("No PDF file to unlock.");
             return;
         }
 
         setIsLoading(true);
 
         try {
-            // 2. Render Image (returns coordinates relative to page top)
-            // renderPdfPageToImage expects 0-based index. pdfPageIndex is 1-based.
+            // 6. Render Image (renderPdfPageToImage expects 0-based index)
+            // pdfPageIndex is 1-based from mapping, so subtract 1
             const img = await renderPdfPageToImage(pdfFile, pdfPageIndex - 1);
 
-            // 3. Adjust Y coordinate for the current page
-            const pageHeight = useStore.getState().canvasDimensions.height;
-            // Use mappingIndex (view position) for Y calculation
-            const pageTop = mappingIndex * (pageHeight + PDF_PAGE_GAP);
+            // 7. Adjust Y coordinate for the current page
+            const pageHeight = canvasDimensions.height;
+            // Use mapIndex (view position) for Y calculation
+            const pageTop = mapIndex * (pageHeight + PDF_PAGE_GAP);
             img.y += pageTop;
 
-            // 4. Update Store
-            setCanvasDimensions(794, 1123); // Reset to A4
+            // 8. Update Store
             addImage(img);
-            hidePdfPage(pdfPageIndex); // Store the PDF Page Number (1-based)
+            hidePdfPage(mapIndex); // Store the 0-based mapIndex
             selectImage(img.id); // Auto-select
 
         } catch (e) {

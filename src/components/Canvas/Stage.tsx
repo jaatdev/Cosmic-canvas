@@ -140,7 +140,7 @@ export default function Stage() {
     const singlePageTotal = pageHeight + PDF_PAGE_GAP;
     const totalHeight = (pageHeight * pageCount) + (PDF_PAGE_GAP * (pageCount - 1));
 
-    // Scroll Listener for Page Counter (Stability Patch)
+    // Scroll Listener for Page Counter (Precision Patch)
     useEffect(() => {
         const handleScroll = () => {
             // STOP updating state if Grid is open
@@ -157,18 +157,23 @@ export default function Stage() {
 
             // 3. Page Height (Physics)
             const gap = PDF_PAGE_GAP;
-            const singlePageHeight = canvasDimensions.height + gap;
+            const singlePageTotal = canvasDimensions.height + gap;
 
-            // 4. Calculate Center Line (Where is the user looking?)
-            // We look at the middle of the viewport (also unzoomed)
+            // 4. Center Line Strategy
+            // We judge the page by what is in the MIDDLE of the screen.
             const viewportMiddle = (window.innerHeight / zoom) / 2;
             const targetY = internalScrollY + viewportMiddle;
 
-            // 5. Derive Page
-            let current = Math.floor(targetY / singlePageHeight) + 1;
-            current = Math.max(1, Math.min(pageCount, current));
+            // 5. Calculate & Clamp
+            let newPage = Math.floor(targetY / singlePageTotal) + 1;
 
-            useStore.getState().setCurrentPage(current);
+            // CRITICAL: Clamp between 1 and pageCount
+            newPage = Math.max(1, Math.min(pageCount, newPage));
+
+            // Only update if changed
+            if (newPage !== useStore.getState().currentPage) {
+                useStore.getState().setCurrentPage(newPage);
+            }
         };
 
         window.addEventListener('scroll', handleScroll, { passive: true });
